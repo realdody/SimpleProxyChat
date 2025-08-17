@@ -34,8 +34,13 @@ dependencies {
 }
 
 configure<ProcessResources>("processResources") {
+    // Capture tokens at configuration time to avoid Task.project access during execution (Gradle 10)
+    val versionToken = project.version.toString()
+    inputs.property("version", versionToken)
+    val tokens = mapOf("version" to versionToken)
+
     filesMatching("plugin.yml") {
-        expand(project.properties)
+        expand(tokens)
     }
 }
 

@@ -14,6 +14,18 @@ BOT-TOKEN: "TOKEN_HERE"
 # Channel to send Discord messages to (IGNORE IF use_discord = false).
 CHANNEL-ID: "GLOBAL_CHANNEL_ID"
 
+# Optional: Discord invite URL for clickable [Discord] tag in Minecraft messages.
+# Example: https://discord.gg/yourinvite
+discord-invite-url: ""
+
+webhook:
+  # Global webhook URL for Discord chat messages.
+  url: ""
+  # Optional: Separate webhook for events (death/advancement). If set, these messages will be sent here
+  # when enabled in messages.yml (discord.death.webhook.send / discord.advancement.webhook.send),
+  # otherwise they fall back to embeds sent directly by the bot (no webhook).
+  events-url: ""
+
 bot-activity:
   # Valid Types: ONLINE, DO_NOT_DISTURB, IDLE, INVISIBLE
   status: ONLINE
@@ -33,6 +45,11 @@ aliases:
   ServerInConfigExample: ServerAliasExample
   hub: Hub1
   smp: smp1
+
+alias-avatars:
+  ServerAliasExample: https://example.com/avatar.png
+  Hub1: https://example.com/avatar.png
+  smp1: https://example.com/avatar.png
 
 # Whether to use the permission system.
 # Some permissions (denoted with ➕) are always active even if this is false.
@@ -73,6 +90,9 @@ use-fake-messages: true
 timestamp:
   format: "hh:mm a"
   timezone: "America/Los_Angeles"
+  # When true, use the API timestamp from Discord messages where supported.
+  # When false, only use the local formatted timestamp in Minecraft-side displays.
+  use-api: false
 
 # True if you will be using the helper plugin.
 use-helper: false
@@ -113,5 +133,30 @@ commands:
 disabled-servers:
   - example1
 
+# Database configuration for account linking (PostgreSQL)
+database:
+  postgres:
+    enabled: false
+    host: "localhost"
+    port: 5432
+    database: "simpleproxychat"
+    username: "postgres"
+    password: "postgres"
+    ssl: false
+    pool:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout-ms: 10000
+      idle-timeout-ms: 600000
+      max-lifetime-ms: 1800000
+
+# Linking system configuration
+linking:
+  enabled: false
+  # Length of generated link codes
+  code-length: 6
+  # Expiration for link codes, in minutes
+  expiration-minutes: 10
+
 # DO NOT TOUCH THIS
-file-version: 16
+file-version: 20

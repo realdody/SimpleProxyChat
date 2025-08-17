@@ -1,6 +1,7 @@
 import com.adarshr.gradle.testlogger.theme.ThemeType
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.Delete
 
 plugins {
     id("com.gradleup.shadow") version("9.0.1")
@@ -80,10 +81,7 @@ allprojects {
     }
 
     tasks.withType<Test> {
-        // Always re-run tests.
-        outputs.upToDateWhen { false }
-        outputs.cacheIf { false }
-
+        // Enable caching and JUnit Platform
         useJUnitPlatform()
 
         // Add the mockito agent as a javaagent JVM argument
@@ -97,12 +95,15 @@ subprojects {
     tasks.withType<ShadowJar> {
         minimize()
         archiveClassifier.set("")
-        archiveBaseName.set(project.name)
+        // Capture values at configuration time to avoid Task.project access during execution (Gradle 10)
+        val projName = project.name
+        val projVersion = project.version.toString()
+        archiveBaseName.set(projName)
+        archiveVersion.set(projVersion)
         destinationDirectory.set(File(rootProject.projectDir, "libs"))
 
         doLast {
-            archiveVersion.set(project.version as String)
-            println("Compiling: " + project.name + "-" + project.version + ".jar")
+            println("Compiling: ${projName}-${projVersion}.jar")
         }
     }
 
@@ -117,8 +118,7 @@ subprojects {
     }
 }
 
-tasks.clean {
-    doLast {
-        file("libs").deleteRecursively()
-    }
+tasks.named<Delete>("clean") {
+    // Delete additional output dir at configuration time (compatible with Gradle 10)
+    delete(layout.projectDirectory.dir("libs"))
 }

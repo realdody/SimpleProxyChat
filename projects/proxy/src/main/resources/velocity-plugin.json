@@ -31,6 +31,10 @@
     {
       "id": "networkmanager",
       "optional": true
+    },
+    {
+      "id": "yeplib",
+      "optional": true
     }
   ],
   "main": "com.beanbeanjuice.simpleproxychat.SimpleProxyChatVelocity"

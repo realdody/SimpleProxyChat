@@ -1,0 +1,37 @@
+# SimpleProxyChat - Word Filter Configuration
+# file-version is used for auto-updating defaults. Do not modify.
+file-version: 1
+
+filter:
+  # Master enable for filtering
+  enabled: false
+
+  # Case-insensitive matching for keys and global words
+  case-insensitive: true
+
+  # When true, only match whole words using word boundaries; when false, match substrings
+  whole-word: true
+
+  # Default replacement for any word listed in global-words (or when a specific replacement is not provided)
+  default: "[Redacted]"
+
+  # Specific word -> replacement mappings. Keys are the words to match, values are the replacement.
+  # Example:
+  #   Fuck: Flip
+  replacements: {}
+
+  # Words that should be replaced using the default replacement value above.
+  # Example:
+  #   - foo
+  #   - bar
+  global-words: []
+
+  # Advanced regex-based replacements. Rules are applied in order of appearance.
+  regex:
+    # Preset: Replace http(s) URLs with clickable [Link] for Minecraft MiniMessage and Discord Markdown
+    rules:
+      url-linkifier:
+        pattern: "(?i)\\bhttps?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+"
+        flags: ""
+        replacement-minecraft: "<click:open_url:\"$0\"><hover:show_text:\"Click to open $0\"><dark_gray>[</dark_gray><aqua>Link<dark_gray>]</hover></click>"
+        replacement-discord: "[Link]($0)"

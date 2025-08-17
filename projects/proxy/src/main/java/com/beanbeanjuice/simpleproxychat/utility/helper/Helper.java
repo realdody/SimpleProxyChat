@@ -10,9 +10,7 @@ import me.leoko.advancedban.manager.UUIDManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.serializer.bungeecord.BungeeComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import net.md_5.bungee.api.chat.BaseComponent;
 import nl.chimpgamer.networkmanager.api.NetworkManagerPlugin;
 
 import java.util.List;
@@ -91,11 +89,7 @@ public class Helper {
         return PlainTextComponentSerializer.plainText().serialize(input);
     }
 
-    public static BaseComponent[] convertToBungee(String message) {
-        message = translateLegacyCodes(message);
-        Component minimessage = MiniMessage.miniMessage().deserialize(message);
-        return BungeeComponentSerializer.get().serialize(minimessage);
-    }
+    // Bungee conversion helper removed as Bungee is no longer part of the build
 
     public static Component stringToComponent(String string) {
         string = translateLegacyCodes(string);

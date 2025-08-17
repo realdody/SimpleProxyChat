@@ -161,6 +161,11 @@ public class VelocityServerListener {
         if (event.getPreviousServer().isEmpty()) {
             if (playerIsInDisabledServer(event.getServer().getServerInfo(), plugin)) return;
 
+            // Provide Discord username chat completions to the player on first join
+            if (plugin.getDiscordBot() != null) {
+                plugin.getDiscordBot().sendChatCompletions(event.getPlayer());
+            }
+
             join(event.getPlayer(), event.getServer().getServerInfo().getName());
             return;
         }

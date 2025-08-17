@@ -3,11 +3,14 @@ package com.beanbeanjuice.simpleproxychat;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityBroadcastCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityChatToggleCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityReloadCommand;
+import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityLinkCommand;
+import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityUnlinkCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.whisper.VelocityReplyCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.whisper.VelocityWhisperCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.ban.VelocityBanCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.ban.VelocityUnbanCommand;
 import com.beanbeanjuice.simpleproxychat.socket.velocity.VelocityPluginMessagingListener;
+import com.beanbeanjuice.simpleproxychat.socket.velocity.YepLibListener;
 import com.beanbeanjuice.simpleproxychat.utility.BanHelper;
 import com.beanbeanjuice.simpleproxychat.utility.ISimpleProxyChat;
 import com.beanbeanjuice.simpleproxychat.utility.UpdateChecker;
@@ -19,6 +22,9 @@ import com.google.inject.Inject;
 import com.beanbeanjuice.simpleproxychat.chat.ChatHandler;
 import com.beanbeanjuice.simpleproxychat.utility.listeners.velocity.VelocityServerListener;
 import com.beanbeanjuice.simpleproxychat.discord.Bot;
+import com.beanbeanjuice.simpleproxychat.discord.DiscordSlashCommandHandler;
+import com.beanbeanjuice.simpleproxychat.linking.DatabaseManager;
+import com.beanbeanjuice.simpleproxychat.linking.LinkService;
 import com.beanbeanjuice.simpleproxychat.utility.helper.Helper;
 import com.beanbeanjuice.simpleproxychat.utility.config.Config;
 import com.beanbeanjuice.simpleproxychat.utility.config.ConfigKey;
@@ -42,10 +48,12 @@ import net.luckperms.api.LuckPermsProvider;
 import nl.chimpgamer.networkmanager.api.NetworkManagerProvider;
 import org.bstats.velocity.Metrics;
 import org.slf4j.Logger;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 
 public class SimpleProxyChatVelocity implements ISimpleProxyChat {
@@ -60,6 +68,8 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
     @Getter private Bot discordBot;
     @Getter private WhisperHandler whisperHandler;
     @Getter private BanHelper banHelper;
+    @Getter private DatabaseManager databaseManager;
+    @Getter private LinkService linkService;
     private Metrics metrics;
     private VelocityServerListener serverListener;
 
@@ -75,6 +85,8 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
 
         this.getLogger().info("The plugin is starting.");
         this.dataDirectory = dataDirectory.toFile();
+        // Initialize PluginManager immediately to avoid NPEs during early async tasks (e.g., Discord bot start)
+        this.pluginManager = this.proxyServer.getPluginManager();
         this.config = new Config(dataDirectory.toFile());
         this.config.initialize();
 
@@ -94,9 +106,54 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
             catch (Exception e) { this.getLogger().warn("There was an error starting the discord bot: {}", e.getMessage()); }
         }).schedule();
 
+        // Initialize database and linking service (if enabled)
+        this.databaseManager = new DatabaseManager(this.config);
+        this.databaseManager.init();
+        this.linkService = new LinkService(this.databaseManager, this.config);
+
         hookPlugins();
         registerListeners();
         registerCommands();
+
+        // Register Discord slash commands/listeners once JDA is ready
+        discordBot.addRunnableToQueue(() -> discordBot.getJDA().ifPresent(jda -> {
+            // Listener for /list (advanced formatting)
+            jda.addEventListener(new DiscordSlashCommandHandler(
+                    config,
+                    linkService,
+                    this::collectVisiblePlayersByServerVelocity,
+                    () -> proxyServer.getAllServers().stream()
+                            .map(s -> s.getServerInfo().getName())
+                            .collect(Collectors.toSet()),
+                    () -> {
+                        Map<String, Boolean> map = new HashMap<>();
+                        proxyServer.getAllServers().forEach(rs -> {
+                            String name = rs.getServerInfo().getName();
+                            Boolean status = (serverListener != null && serverListener.getServerStatusManager() != null)
+                                    ? serverListener.getServerStatusManager().getStatus(name).getStatus()
+                                    : null;
+                            map.put(name, status);
+                        });
+                        return map;
+                    },
+                    this::getMaxPlayers
+            ));
+            // Ensure the command exists on the guild owning the configured channel
+            discordBot.getBotTextChannel().ifPresent(tc -> {
+                tc.getGuild().upsertCommand("list", "List online players across servers").queue();
+                tc.getGuild().upsertCommand("link", "Link your Minecraft account to Discord")
+                        .addOption(OptionType.STRING, "code", "Your link code from /link in-game", true)
+                        .queue();
+                tc.getGuild().upsertCommand("check-link", "Check link status for a Discord or Minecraft account")
+                        .addOption(OptionType.USER, "discord_user", "Discord user to check", false)
+                        .addOption(OptionType.STRING, "discord_id", "Discord ID to check", false)
+                        .addOption(OptionType.STRING, "minecraft", "Minecraft username or UUID to check", false)
+                        .queue();
+            });
+        }));
+
+        // Once the bot is ready, add Discord username chat completions to all currently online players
+        discordBot.addRunnableToQueue(() -> proxyServer.getAllPlayers().forEach(discordBot::sendChatCompletions));
 
         // Start Channel Topic Updater
         this.proxyServer.getScheduler().buildTask(this, discordBot::channelUpdaterFunction).delay(1, TimeUnit.MINUTES).repeat(10, TimeUnit.MINUTES).schedule();
@@ -201,6 +258,19 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
         this.proxyServer.getEventManager().register(this, new VelocityPluginMessagingListener(this, serverListener));
         this.proxyServer.getChannelRegistrar().register(VelocityPluginMessagingListener.IDENTIFIER);
 
+        // Conditionally register YepLib integration (Velocity-only) if present at runtime.
+        try {
+            if (this.proxyServer.getPluginManager().getPlugin("yeplib").isPresent()) {
+                this.getLogger().info("YepLib detected; enabling YepLib integration.");
+                this.proxyServer.getEventManager().register(this, new YepLibListener(this, serverListener));
+            } else {
+                this.getLogger().info("YepLib not detected; skipping YepLib integration.");
+            }
+        } catch (Throwable t) {
+            // Extra safety: if classes are missing or anything fails, do not impact normal operation.
+            this.getLogger().warn("YepLib was detected but integration failed to initialize: {}", t.toString());
+        }
+
         whisperHandler = new WhisperHandler();
     }
 
@@ -241,12 +311,20 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
                 .aliases(config.get(ConfigKey.BROADCAST_ALIASES).asList().toArray(new String[0]))
                 .plugin(this)
                 .build();
+        CommandMeta linkCommand = commandManager.metaBuilder("link")
+                .plugin(this)
+                .build();
+        CommandMeta unlinkCommand = commandManager.metaBuilder("unlink")
+                .plugin(this)
+                .build();
 
         commandManager.register(reloadCommand, new VelocityReloadCommand(this));
         commandManager.register(chatToggleCommand, new VelocityChatToggleCommand(this));
         commandManager.register(whisperCommand, new VelocityWhisperCommand(this));
         commandManager.register(replyCommand, new VelocityReplyCommand(this));
         commandManager.register(broadcastCommand, new VelocityBroadcastCommand(this));
+        commandManager.register(linkCommand, new VelocityLinkCommand(this));
+        commandManager.register(unlinkCommand, new VelocityUnlinkCommand(this));
 
         // Only enable if the Simple Banning System is enabled.
         if (config.get(ConfigKey.USE_SIMPLE_PROXY_CHAT_BANNING_SYSTEM).asBoolean()) {
@@ -268,10 +346,22 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
         return this.getProxyServer().getConfiguration().getShowMaxPlayers();
     }
 
+    private Map<String, List<String>> collectVisiblePlayersByServerVelocity() {
+        // Group visible players by current server name
+        return this.proxyServer.getAllPlayers().stream()
+                .filter(p -> !this.isVanishAPIEnabled() || !VelocityVanishAPI.isInvisible(p))
+                .filter(p -> p.getCurrentServer().isPresent())
+                .collect(Collectors.groupingBy(
+                        p -> p.getCurrentServer().get().getServerInfo().getName(),
+                        Collectors.mapping(p -> p.getUsername(), Collectors.toList())
+                ));
+    }
+
     @Subscribe(order = PostOrder.LAST)
     public void onProxyShutdown(ProxyShutdownEvent event) {
         this.getLogger().info("The plugin is shutting down...");
-        discordBot.stop();
+        if (discordBot != null) discordBot.stop();
+        if (databaseManager != null) databaseManager.close();
     }
 
     @Override

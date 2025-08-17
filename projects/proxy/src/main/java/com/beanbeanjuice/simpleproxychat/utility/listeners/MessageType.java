@@ -4,5 +4,7 @@ public enum MessageType {
     CHAT,
     JOIN,
     LEAVE,
-    SWITCH
+    SWITCH,
+    ADVANCEMENT,
+    DEATH
 }

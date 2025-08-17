@@ -368,6 +368,7 @@ file-version: 11
 * `%receiver%` - The person receiving the private message. **Private Messaging Only**
 * `%user%` - The player's Discord username.
 * `%nick%` - The player's Discord nickname.
+* `%display_name%` - The player's Discord display name (nickname if set; otherwise global/server display name; else username).
 * `%role%` - The player's Discord role.
 * `%prefix%` - The player's prefix. **LuckPerms Only**
 * `%suffix%` - The player's suffix. **LuckPerms Only**

@@ -14,6 +14,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
+import com.velocitypowered.api.proxy.Player;
 
 import java.awt.*;
 import java.time.Duration;
@@ -34,6 +35,7 @@ public class Bot {
     private final Supplier<Integer> getMaxPlayers;
 
     private final Queue<Runnable> runnableQueue;
+    private List<String> mentionCompletions;
 
     private boolean channelTopicErrorSent = false;
 
@@ -78,8 +80,6 @@ public class Bot {
                 },
                 () -> errorLogger.accept("There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?")
         );
-
-
     }
 
     /**
@@ -186,6 +186,16 @@ public class Bot {
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS)
                 .build().awaitReady();
 
+        // Load Discord username mention completions from the configured channel
+        this.getBotTextChannel().ifPresent(channel -> {
+            try {
+                this.mentionCompletions = channel.getMembers()
+                        .stream()
+                        .map(m -> "@" + m.getUser().getName())
+                        .collect(Collectors.toList());
+            } catch (Exception ignored) { }
+        });
+
         sendProxyStatus(true);
 
         this.updateActivity();
@@ -264,6 +274,24 @@ public class Bot {
                 }
             } catch (InterruptedException ignored) { }
         });
+    }
+
+    /**
+     * Adds Discord username chat completions ("@username") to the provided Velocity player.
+     * If the bot or member list isn't ready yet, this will be queued and applied once ready.
+     */
+    public void sendChatCompletions(final Player player) {
+        if (player == null) return;
+        if (this.mentionCompletions == null) {
+            // Queue until after ready and members fetched
+            this.addRunnableToQueue(() -> {
+                if (this.mentionCompletions != null) {
+                    try { player.addCustomChatCompletions(this.mentionCompletions); } catch (Throwable ignored) { }
+                }
+            });
+            return;
+        }
+        try { player.addCustomChatCompletions(this.mentionCompletions); } catch (Throwable ignored) { }
     }
 
 }

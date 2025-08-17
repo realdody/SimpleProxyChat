@@ -23,8 +23,35 @@ public class Config {
 
     private YamlDocument yamlConfig;
     private YamlDocument yamlMessages;
+    private YamlDocument yamlFilter;
     private final File configFolder;
     private final HashMap<ConfigKey, ConfigValueWrapper> config;
+    // Filter configuration (filter.yml)
+    @Getter private boolean filterEnabled = false;
+    @Getter private boolean filterCaseInsensitive = true;
+    @Getter private boolean filterWholeWord = true;
+    @Getter private String filterDefaultReplacement = "[Redacted]";
+    @Getter private Map<String, String> filterReplacements = new HashMap<>();
+    @Getter private List<String> filterGlobalWords = new ArrayList<>();
+    @Getter private boolean filterRegexOverrideLinkifier = false;
+    @Getter private List<FilterRegexRule> filterRegexRules = new ArrayList<>();
+
+    // Regex rule DTO
+    public static class FilterRegexRule {
+        public final String id;
+        public final String pattern;
+        public final String replacementMinecraft;
+        public final String replacementDiscord;
+        public final String flags; // e.g., "i", "m", "s"
+
+        public FilterRegexRule(String id, String pattern, String replacementMinecraft, String replacementDiscord, String flags) {
+            this.id = id;
+            this.pattern = pattern;
+            this.replacementMinecraft = replacementMinecraft;
+            this.replacementDiscord = replacementDiscord;
+            this.flags = flags;
+        }
+    }
     private final ArrayList<Runnable> reloadFunctions;
 
     @Getter private final ServerChatLockHelper serverChatLockHelper;
@@ -40,11 +67,15 @@ public class Config {
         try {
             yamlConfig = loadConfig("config.yml");
             yamlMessages = loadConfig("messages.yml");
+            yamlFilter = loadConfig("filter.yml");
             yamlConfig.update();
             yamlMessages.update();
+            yamlFilter.update();
             yamlConfig.save();
             yamlMessages.save();
+            yamlFilter.save();
             readConfig();
+            readFilter();
         } catch (IOException ignored) { }
     }
 
@@ -56,7 +87,9 @@ public class Config {
         try {
             yamlConfig.reload();
             yamlMessages.reload();
+            yamlFilter.reload();
             readConfig();
+            readFilter();
             reloadFunctions.forEach(Runnable::run);
         } catch (IOException ignored) { }
     }
@@ -89,11 +122,27 @@ public class Config {
             if (key.getClassType() == Map.class) {
                 Map<String, String> map = new HashMap<>();
                 Section mapSection = document.getSection(route);
-                mapSection.getKeys().stream()
-                        .map((mapKey) -> (String) mapKey)
-                        .map((mapKey) -> Tuple.of(mapKey, mapSection.getString(mapKey)))
-                        .forEach((pair) -> map.put(pair.getKey(), Helper.translateLegacyCodes(pair.getValue())));
-
+                if (mapSection != null) {
+                    for (Object raw : mapSection.getKeys()) {
+                        String mapKey = String.valueOf(raw);
+                        String value = mapSection.getString(mapKey);
+                        if (value == null) {
+                            // Special handling for aliases: allow nested mapping like "server: Alias: AvatarURL"
+                            if ("aliases".equals(route)) {
+                                Section nested = mapSection.getSection(mapKey);
+                                if (nested != null) {
+                                    // Use the first child key as the alias string
+                                    String aliasKey = null;
+                                    for (Object child : nested.getKeys()) { aliasKey = String.valueOf(child); break; }
+                                    if (aliasKey != null) value = aliasKey;
+                                }
+                            }
+                        }
+                        if (value != null) {
+                            map.put(mapKey, Helper.translateLegacyCodes(value));
+                        }
+                    }
+                }
                 this.config.put(key, new ConfigValueWrapper(map));
                 return;
             }
@@ -144,6 +193,51 @@ public class Config {
 
     }
 
+    private void readFilter() {
+        if (yamlFilter == null) return;
+
+        // Basic toggles
+        this.filterEnabled = yamlFilter.getBoolean("filter.enabled", false);
+        this.filterCaseInsensitive = yamlFilter.getBoolean("filter.case-insensitive", true);
+        this.filterWholeWord = yamlFilter.getBoolean("filter.whole-word", true);
+        this.filterDefaultReplacement = Helper.translateLegacyCodes(yamlFilter.getString("filter.default", "[Redacted]"));
+
+        // Replacements map
+        Map<String, String> map = new HashMap<>();
+        Section repl = yamlFilter.getSection("filter.replacements");
+        if (repl != null) {
+            repl.getKeys().forEach(k -> {
+                String key = String.valueOf(k);
+                String val = repl.getString(key);
+                map.put(key, Helper.translateLegacyCodes(val != null ? val : ""));
+            });
+        }
+        this.filterReplacements = map;
+
+        // Global words list
+        List<String> globals = yamlFilter.getStringList("filter.global-words");
+        if (globals == null) globals = new ArrayList<>();
+        this.filterGlobalWords = globals.stream().map(Helper::translateLegacyCodes).toList();
+
+        // Regex rules
+        this.filterRegexOverrideLinkifier = yamlFilter.getBoolean("filter.regex.override-linkifier", false);
+        List<FilterRegexRule> rules = new ArrayList<>();
+        Section rulesSec = yamlFilter.getSection("filter.regex.rules");
+        if (rulesSec != null) {
+            for (Object key : rulesSec.getKeys()) {
+                String id = String.valueOf(key);
+                Section rs = rulesSec.getSection(id);
+                if (rs == null) continue;
+                String pattern = rs.getString("pattern");
+                String replMc = rs.getString("replacement-minecraft");
+                String replDc = rs.getString("replacement-discord");
+                String flags = rs.getString("flags");
+                rules.add(new FilterRegexRule(id, pattern, replMc, replDc, flags));
+            }
+        }
+        this.filterRegexRules = rules;
+    }
+
     public void overwrite(ConfigKey key, Object value) {
         config.put(key, new ConfigValueWrapper(value));
     }
@@ -178,6 +272,58 @@ public class Config {
 
                         .build()
         );
+    }
+
+    // Returns alias to use for events webhook from the simple 'aliases' mapping (server -> alias).
+    // Retains legacy nested fallback for backward compatibility.
+    public String getEventWebhookAliasOverride(String serverName) {
+        if (yamlConfig == null || serverName == null || serverName.isBlank()) return null;
+        Section aliases = yamlConfig.getSection("aliases");
+        if (aliases == null) return null;
+
+        String simple = aliases.getString(serverName);
+        if (simple != null && !simple.isBlank()) return Helper.translateLegacyCodes(simple);
+
+        // Legacy fallback: nested mapping under aliases (server -> { Alias: AvatarURL })
+        Section nested = aliases.getSection(serverName);
+        if (nested != null) {
+            for (Object child : nested.getKeys()) {
+                String aliasKey = String.valueOf(child);
+                if (aliasKey != null && !aliasKey.isBlank()) return Helper.translateLegacyCodes(aliasKey);
+            }
+        }
+        return null;
+    }
+
+    // Returns avatar URL override for events webhook from the new 'alias-avatars' map (alias -> avatarUrl).
+    // Falls back to legacy nested mapping under 'aliases' if present.
+    public String getEventWebhookAvatarOverride(String serverName) {
+        if (yamlConfig == null || serverName == null || serverName.isBlank()) return null;
+
+        // First, resolve the alias from the simple aliases map (or legacy nested)
+        String alias = getEventWebhookAliasOverride(serverName);
+
+        // Preferred: look up by alias in alias-avatars
+        Section avatars = yamlConfig.getSection("alias-avatars");
+        if (avatars != null && alias != null && !alias.isBlank()) {
+            String url = avatars.getString(alias);
+            if (url != null && !url.isBlank()) return url;
+        }
+
+        // Legacy fallback: nested mapping under aliases (server -> { Alias: AvatarURL })
+        Section aliases = yamlConfig.getSection("aliases");
+        if (aliases != null) {
+            Section nested = aliases.getSection(serverName);
+            if (nested != null) {
+                for (Object child : nested.getKeys()) {
+                    String aliasKey = String.valueOf(child);
+                    String url = nested.getString(aliasKey);
+                    if (url != null && !url.isBlank()) return url;
+                    break;
+                }
+            }
+        }
+        return null;
     }
 
 }

@@ -26,6 +26,13 @@ minecraft:
     enabled: true
     message: "&8[&3%server%&8] &e%player% &9» &7%message%"
     vanished: "&cYou cannot send proxy messages while vanished. Your message must end with a '&e/&c' to speak."
+  death:
+    # YepLib: Minecraft death message template
+    message: "<gray>[<red>Death</red>]</gray> <yellow>%player%</yellow> <gray>»</gray> %death_message%"
+  advancement:
+    # YepLib: Minecraft advancement message template
+    # Placeholders: %player%, %title%, %description%, %advancement_type%, %server%
+    message: "<gray>[<green>Advancement</green>%advancement_type%]</gray> <yellow>%player%</yellow> <gray>»</gray> %title% - %description%"
   switch:
     enabled: true
     default: "&e%player% &7moved from &c%from% &7to &a%to%&7."
@@ -36,8 +43,20 @@ minecraft:
     error: "&c/spc-whisper (user) (message)"
   discord:
     enabled: true
-    message: "**%server%** %player% » %message%"
+    # Select how Minecraft->Discord chat messages are sent.
+    # Options: plain, embed, webhook
+    mode: plain
+    message: "%message%"
+    webhook:
+      # Username to display for webhook messages. Supports %player%, %escaped_player%, %server%, %original_server%.
+      # Default is %player% (player name). To post per-server, set this to "%server%".
+      username-format: "%player%"
+      # Avatar URL template. Supports {uuid}, {uuid-nodashes}, {username}.
+      avatar-url: "https://crafthead.net/avatar/{uuid}"
+      # If false (recommended), prevent all mentions (no @everyone/@here/user mentions).
+      allowed-mentions: false
     embed:
+      # DEPRECATED: prefer minecraft.discord.mode: "embed". This flag is ignored when mode is used.
       use: false
       title: "[%server%] %player%"
       message: "%message%"
@@ -64,6 +83,14 @@ minecraft:
     broadcast:
       usage: "%plugin-prefix% &c/spc-broadcast (message)"
       message: "%plugin-prefix% &8[&a&lBROADCAST&r&8] &6%message%"
+    link:
+      already-linked: "%plugin-prefix% &cYour Minecraft account is already linked."
+      code: "%plugin-prefix% &7Your link code is &a%code%&7. In Discord, run &a/link %code% &7within &e%minutes% &7minutes."
+      error: "%plugin-prefix% &cThere was an error generating your link code. Please contact an administrator."
+    unlink:
+      success: "%plugin-prefix% &aYour Discord account has been unlinked from your Minecraft account."
+      not-linked: "%plugin-prefix% &eYour Minecraft account is not currently linked."
+      error: "%plugin-prefix% &cThere was an error unlinking your account. Please contact an administrator."
 
 # Discord Stuff
 discord:
@@ -87,7 +114,90 @@ discord:
     use-embed: true
   chat:
     enabled: true
-    minecraft-message: "&8[&bDiscord&8] %role% &f%user% &9» &7%message%"
+    # Placeholders: %role%, %user% (username), %nick% (nickname), %display_name% (display name), %message%, %discord-tag%
+    minecraft-message: "&8&b%discord-tag%&8 %role% &f%display_name% &9» &7%message%"
+  events:
+    webhook:
+      username-format: "%server%"
+  death:
+    # YepLib: Discord death message templates
+    message: "[Death] %player% » %death_message%"
+    webhook:
+      # When true, send death messages via the events webhook (webhook.events-url)
+      send: true
+    embed:
+      title: ""
+      description: "**%player% » %death_message%**"
+      use-timestamp: true
+      # Controls for using the author row and its icon in death embeds
+      # When true, shows an author row. Text comes from author-text (if set).
+      use-author: true
+      # When true, shows the author icon. Defaults to player's head when author-icon-url is blank.
+      use-author-icon: true
+      # Optional explicit author text. Supports placeholders: %player%, %death_message%, %server%, %original_server%.
+      # When blank and use-author is true, a zero-width space is used so the icon can render (icon-only author row).
+      author-text: ""
+      # Optional author icon URL template. Supports {uuid}, {uuid-nodashes}, {username}. When blank, uses player head.
+      author-icon-url: ""
+  advancement:
+    # YepLib: Discord advancement message templates
+    # Placeholders: %player%, %title%, %description%, %advancement_type%, %server%
+    message: "[Advancement%advancement_type%] %player% » %title% - %description%"
+    webhook:
+      # When true, send advancement messages via the events webhook (webhook.events-url)
+      send: true
+    embed:
+      title: ""
+      description: "**%player%** has made the advancement **%title%**. _%description%_"
+      use-timestamp: true
+      # Controls for using the author row and its icon in advancement embeds
+      # Disabled by default to preserve existing appearance.
+      use-author: false
+      # When true, shows the author icon. Defaults to player's head when author-icon-url is blank.
+      use-author-icon: true
+      # Optional explicit author text. Supports placeholders: %player%, %title%, %description%, %server%, %original_server%.
+      # When blank and use-author is true, a zero-width space is used so the icon can render (icon-only author row).
+      author-text: ""
+      # Optional author icon URL template. Supports {uuid}, {uuid-nodashes}, {username}. When blank, uses player head.
+      author-icon-url: ""
+  command:
+    list:
+      enabled: true
+      allowed-roles: []
+      ephemeral: true
+      header: "Online (%total%):"
+      per-server: "**%server%** (%count%): %players%"
+      none: "No players online."
+      # Advanced formatting (optional). When server-format is set, these are used; header/per-server/none are ignored.
+      # Placeholders:
+      #   server-format: %server_name%, %online_players%, %max_players%
+      #   player-format: %username%
+      #   no-players-format: (no placeholders)
+      #   server-offline-format: (no placeholders)
+      codeblock-lang: "asciidoc"
+      server-format: "[%server_name% %online_players%/%max_players%]"
+      player-format: "- %username%"
+      no-players-format: "No players online"
+      server-offline-format: "Server offline"
+    link:
+      enabled: true
+      allowed-roles: []
+      ephemeral: true
+      usage: "Use /link <code> to link your Discord to your Minecraft account."
+      success: "✅ Your Discord account has been linked successfully."
+      invalid: "❌ That code is invalid. Please generate a new one in-game with /link."
+      expired: "⌛ That code has expired. Please generate a new one in-game with /link."
+      already-used: "⚠️ That code was already used. Please generate a new one in-game with /link."
+      already-linked: "ℹ️ Your Discord account is already linked."
+      db-error: "⚠️ An internal error occurred while linking. Please try again later."
+    check-link:
+      enabled: true
+      allowed-roles: []
+      ephemeral: true
+      usage: "Use /check-link to see if your Discord is linked to a Minecraft account."
+      linked: "✅ Your Discord is linked to a Minecraft account."
+      not-linked: "ℹ️ Your Discord is not linked to a Minecraft account."
+      db-error: "⚠️ An internal error occurred while checking your link status. Please try again later."
   topic:
     online: "There are %online% players online."
     offline: "The proxy is offline."
@@ -116,4 +226,4 @@ console:
 update-message: "&7There is an update! You are on &c%old%. New version is &a%new%&7: &6%link%"
 
 # DO NOT TOUCH THIS
-file-version: 11
+file-version: 18
