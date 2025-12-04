@@ -4,19 +4,47 @@ import lombok.Getter;
 
 import java.util.Optional;
 
+/**
+ * Tracks the status of a single backend server with debouncing to prevent false
+ * positives.
+ */
 public class ServerStatus {
 
-    @Getter private Boolean status;  // Object wrapper to use Object#equals to detect state change.
-    private Boolean previousStatus;  // Object wrapper to use Object#equals to detect state change.
+    @Getter
+    private ServerState state = ServerState.UNKNOWN;
+    private ServerState previousPingResult = null;
     private int onlineCount = 0;
     private int offlineCount = 0;
 
-    private static final int COUNT_UNTIL_UPDATE = 5;
+    private final int countUntilUpdate;
 
-    public ServerStatus() { }
-    public ServerStatus(boolean initialStatus) {
-        this.status = initialStatus;
-        this.previousStatus = initialStatus;
+    /**
+     * Creates a ServerStatus with default debounce threshold (5).
+     */
+    public ServerStatus() {
+        this(5);
+    }
+
+    /**
+     * Creates a ServerStatus with a custom debounce threshold.
+     * 
+     * @param countUntilUpdate Number of consecutive pings required to confirm a
+     *                         state change.
+     */
+    public ServerStatus(int countUntilUpdate) {
+        this.countUntilUpdate = Math.max(1, countUntilUpdate);
+    }
+
+    /**
+     * Creates a ServerStatus with initial state and custom threshold.
+     * 
+     * @param initialState     The initial state of the server.
+     * @param countUntilUpdate Number of consecutive pings required to confirm a
+     *                         state change.
+     */
+    public ServerStatus(ServerState initialState, int countUntilUpdate) {
+        this.state = initialState;
+        this.countUntilUpdate = Math.max(1, countUntilUpdate);
     }
 
     private void resetCount() {
@@ -24,17 +52,76 @@ public class ServerStatus {
         offlineCount = 0;
     }
 
-    public Optional<Boolean> updateStatus(Boolean newStatus) {
-        if (newStatus.equals(this.status)) return Optional.empty();  // Do nothing if no state change.
-        if (!newStatus.equals(this.previousStatus)) resetCount();  // This means a state change has occurred.
-        this.previousStatus = newStatus;
+    /**
+     * Updates the status based on a ping result.
+     * 
+     * @param isOnline Whether the ping succeeded (server is online).
+     * @return Optional containing the new state if a state change was confirmed,
+     *         empty otherwise.
+     */
+    public Optional<ServerState> updateStatus(boolean isOnline) {
+        ServerState targetState = isOnline ? ServerState.ONLINE : ServerState.OFFLINE;
 
-        int count = newStatus ? ++this.onlineCount : ++this.offlineCount;
-        if (count < COUNT_UNTIL_UPDATE) return Optional.empty();  // Do nothing if conditions are not met.
+        // If we're already in this state, no change needed
+        if (targetState == this.state) {
+            resetCount();
+            return Optional.empty();
+        }
 
-        resetCount();  // Conditions are met. Reset.
-        this.status = newStatus;
-        return Optional.of(this.status);
+        // Check if ping result direction changed (was trending online, now offline or
+        // vice versa)
+        ServerState currentPingResult = isOnline ? ServerState.ONLINE : ServerState.OFFLINE;
+        if (previousPingResult != null && currentPingResult != previousPingResult) {
+            resetCount();
+        }
+        previousPingResult = currentPingResult;
+
+        // Increment appropriate counter
+        int count = isOnline ? ++this.onlineCount : ++this.offlineCount;
+
+        // Check if threshold reached
+        if (count < countUntilUpdate) {
+            return Optional.empty();
+        }
+
+        // Threshold reached - confirm state change
+        resetCount();
+        this.state = targetState;
+        return Optional.of(this.state);
     }
 
+    /**
+     * Immediately confirms the server as online (for event-driven detection).
+     * This bypasses the debounce threshold.
+     * 
+     * @return Optional containing ONLINE if state changed, empty if already online.
+     */
+    public Optional<ServerState> confirmOnline() {
+        if (this.state == ServerState.ONLINE) {
+            return Optional.empty();
+        }
+
+        resetCount();
+        previousPingResult = ServerState.ONLINE;
+        this.state = ServerState.ONLINE;
+        return Optional.of(ServerState.ONLINE);
+    }
+
+    /**
+     * Gets the status as a boolean for backwards compatibility.
+     * 
+     * @return true if ONLINE, false if OFFLINE or UNKNOWN.
+     */
+    public Boolean getStatus() {
+        return this.state == ServerState.ONLINE;
+    }
+
+    /**
+     * Checks if the server has ever been confirmed online or offline.
+     * 
+     * @return true if state is known (ONLINE or OFFLINE), false if UNKNOWN.
+     */
+    public boolean isKnown() {
+        return this.state != ServerState.UNKNOWN;
+    }
 }

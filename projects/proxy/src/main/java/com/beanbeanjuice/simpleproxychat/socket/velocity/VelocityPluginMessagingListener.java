@@ -20,23 +20,28 @@ public class VelocityPluginMessagingListener {
     private final SimpleProxyChatVelocity plugin;
     private final VelocityServerListener listener;
 
-    public VelocityPluginMessagingListener(final SimpleProxyChatVelocity plugin, final VelocityServerListener listener) {
+    public VelocityPluginMessagingListener(final SimpleProxyChatVelocity plugin,
+            final VelocityServerListener listener) {
         this.plugin = plugin;
         this.listener = listener;
     }
 
     @Subscribe
     public void onPluginMessageFromPlayer(PluginMessageEvent event) {
-        if (event.getIdentifier() != IDENTIFIER) return;
+        if (event.getIdentifier() != IDENTIFIER)
+            return;
 
         ByteArrayDataInput input = ByteStreams.newDataInput(event.getData());
 
-        if (!input.readUTF().equals("SimpleProxyChat")) return;
+        if (!input.readUTF().equals("SimpleProxyChat"))
+            return;
 
         MessageType type = MessageType.valueOf(input.readUTF());
 
         switch (type) {
             case CHAT -> runChat(input);
+            default -> {
+            } // Other message types are handled elsewhere
         }
     }
 
@@ -52,19 +57,19 @@ public class VelocityPluginMessagingListener {
         Optional<Player> player = plugin.getProxyServer().getPlayer(playerName);
         Optional<RegisteredServer> server = plugin.getProxyServer().getServer(serverName);
 
-        if (player.isEmpty() || server.isEmpty()) return;
+        if (player.isEmpty() || server.isEmpty())
+            return;
 
         VelocityChatMessageData messageData = new VelocityChatMessageData(
-                plugin, MessageType.CHAT, server.get(), player.get(), playerMessage, parsedMinecraftString, parsedDiscordString, parsedDiscordEmbedTitle, parsedDiscordEmbedMessage
-        );
+                plugin, MessageType.CHAT, server.get(), player.get(), playerMessage, parsedMinecraftString,
+                parsedDiscordString, parsedDiscordEmbedTitle, parsedDiscordEmbedMessage);
 
         this.listener.getChatHandler().chat(
                 messageData,
                 Helper.translateLegacyCodes(parsedMinecraftString),
                 Helper.translateLegacyCodes(parsedDiscordString),
                 Helper.translateLegacyCodes(parsedDiscordEmbedTitle),
-                Helper.translateLegacyCodes(parsedDiscordEmbedMessage)
-        );
+                Helper.translateLegacyCodes(parsedDiscordEmbedMessage));
     }
 
 }

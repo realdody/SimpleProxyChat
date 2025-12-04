@@ -44,20 +44,20 @@ public class ChatHandler {
     private final WebhookSender webhookSender;
     private final LastMessagesHelper lastMessagesHelper;
     private final MessageFormatter messageFormatter;
-    
+
     // Cache for compiled regex patterns to avoid recompilation on every message
     private static class CompiledRegexRule {
         final Pattern pattern;
         final String replacementMinecraft;
         final String replacementDiscord;
-        
+
         CompiledRegexRule(Pattern pattern, String replacementMinecraft, String replacementDiscord) {
             this.pattern = pattern;
             this.replacementMinecraft = replacementMinecraft;
             this.replacementDiscord = replacementDiscord;
         }
     }
-    
+
     private volatile List<CompiledRegexRule> compiledRegexCache = new ArrayList<>();
 
     public ChatHandler(ISimpleProxyChat plugin) {
@@ -67,30 +67,35 @@ public class ChatHandler {
         this.webhookSender = new WebhookSender(plugin, this.config);
         this.lastMessagesHelper = new LastMessagesHelper(plugin.getSPCConfig());
         this.messageFormatter = new MessageFormatter(this.config);
-        
+
         // Pre-compile regex patterns for performance
         rebuildRegexCache();
 
-        plugin.getDiscordBot().addRunnableToQueue(() -> plugin.getDiscordBot().getJDA().ifPresent((jda) -> jda.addEventListener(new DiscordChatHandler(config, this::sendFromDiscord))));
+        plugin.getDiscordBot().addRunnableToQueue(() -> plugin.getDiscordBot().getJDA()
+                .ifPresent((jda) -> jda.addEventListener(new DiscordChatHandler(config, this::sendFromDiscord))));
     }
-    
+
     /**
      * Rebuilds the regex pattern cache from config. Call this after config reload.
      */
     public void rebuildRegexCache() {
         List<FilterConfig.FilterRegexRule> rules = config.getFilterConfig().getRegexRules();
         List<CompiledRegexRule> newCache = new ArrayList<>();
-        
+
         for (FilterConfig.FilterRegexRule r : rules) {
-            if (r == null || r.pattern == null || r.pattern.isEmpty()) continue;
-            
+            if (r == null || r.pattern == null || r.pattern.isEmpty())
+                continue;
+
             int flags = 0;
             if (r.flags != null) {
-                if (r.flags.contains("i")) flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
-                if (r.flags.contains("m")) flags |= Pattern.MULTILINE;
-                if (r.flags.contains("s")) flags |= Pattern.DOTALL;
+                if (r.flags.contains("i"))
+                    flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+                if (r.flags.contains("m"))
+                    flags |= Pattern.MULTILINE;
+                if (r.flags.contains("s"))
+                    flags |= Pattern.DOTALL;
             }
-            
+
             try {
                 Pattern compiled = Pattern.compile(r.pattern, flags);
                 String replMc = r.replacementMinecraft != null ? r.replacementMinecraft : "";
@@ -101,7 +106,7 @@ public class ChatHandler {
                 plugin.log("Invalid regex pattern in filter config: " + r.pattern + " - " + e.getMessage());
             }
         }
-        
+
         this.compiledRegexCache = newCache;
     }
 
@@ -109,30 +114,38 @@ public class ChatHandler {
         String messagePrefix = config.get(ConfigKey.PROXY_MESSAGE_PREFIX).asString();
         String messagePrefixBlacklist = config.get(ConfigKey.PROXY_MESSAGE_PREFIX_BLACKLIST).asString();
 
-        if (!messagePrefixBlacklist.isEmpty() && message.startsWith(messagePrefixBlacklist)) return Optional.empty();
+        if (!messagePrefixBlacklist.isEmpty() && message.startsWith(messagePrefixBlacklist))
+            return Optional.empty();
 
-        if (messagePrefix.isEmpty()) return Optional.of(message);
-        if (!message.startsWith(messagePrefix)) return Optional.empty();
+        if (messagePrefix.isEmpty())
+            return Optional.of(message);
+        if (!message.startsWith(messagePrefix))
+            return Optional.empty();
 
         message = message.substring(messagePrefix.length());
-        if (message.isEmpty()) return Optional.empty();
+        if (message.isEmpty())
+            return Optional.empty();
         return Optional.of(message);
     }
 
-    public void chat(ChatMessageData chatMessageData, String minecraftMessage, String discordMessage, String discordEmbedTitle, String discordEmbedMessage) {
+    public void chat(ChatMessageData chatMessageData, String minecraftMessage, String discordMessage,
+            String discordEmbedTitle, String discordEmbedMessage) {
         // Log to Console
-        if (config.get(ConfigKey.CONSOLE_CHAT).asBoolean()) plugin.log(minecraftMessage);
+        if (config.get(ConfigKey.CONSOLE_CHAT).asBoolean())
+            plugin.log(minecraftMessage);
 
         // Log to Discord
         if (config.get(ConfigKey.MINECRAFT_DISCORD_ENABLED).asBoolean()) {
-            // Events (advancement/death) can be routed to a separate webhook regardless of global mode
+            // Events (advancement/death) can be routed to a separate webhook regardless of
+            // global mode
             boolean sentToEventsWebhook = false;
             if (chatMessageData.getType() == MessageType.ADVANCEMENT &&
                     config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_WEBHOOK_SEND).asBoolean()) {
                 String originalServer = chatMessageData.getServername();
                 String aliasedServer = Helper.convertAlias(config, originalServer);
                 // Resolve events webhook (single URL)
-                String eventsUrl = java.util.Optional.ofNullable(config.get(ConfigKey.DISCORD_EVENTS_WEBHOOK_URL).asString()).orElse("");
+                String eventsUrl = java.util.Optional
+                        .ofNullable(config.get(ConfigKey.DISCORD_EVENTS_WEBHOOK_URL).asString()).orElse("");
 
                 if (eventsUrl != null && !eventsUrl.isBlank()) {
                     webhookSender.sendEventEmbed(
@@ -143,8 +156,7 @@ public class ChatHandler {
                             MessageType.ADVANCEMENT,
                             discordEmbedTitle,
                             discordEmbedMessage,
-                            null
-                    );
+                            null);
                 } else {
                     // Fallback to bot embed (no webhooks)
                     java.awt.Color color = config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_COLOR).asColor();
@@ -153,24 +165,37 @@ public class ChatHandler {
                     // Respect messages.yml advancement embed toggles
                     boolean useAuthor = false; // default off for advancement
                     boolean useAuthorIcon = true;
-                    try { useAuthor = config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_EMBED_USE_AUTHOR).asBoolean(); } catch (Throwable ignored) {}
-                    try { useAuthorIcon = config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_EMBED_USE_AUTHOR_ICON).asBoolean(); } catch (Throwable ignored) {}
+                    try {
+                        useAuthor = config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_EMBED_USE_AUTHOR).asBoolean();
+                    } catch (Throwable ignored) {
+                    }
+                    try {
+                        useAuthorIcon = config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_EMBED_USE_AUTHOR_ICON).asBoolean();
+                    } catch (Throwable ignored) {
+                    }
 
                     // Title/Description from passed-in values (already formatted for event)
                     String _title = java.util.Optional.ofNullable(discordEmbedTitle).orElse("").trim();
                     String _desc = java.util.Optional.ofNullable(discordEmbedMessage).orElse("").trim();
-                    if (!_title.isEmpty()) embedBuilder.setTitle(_title);
-                    if (!_desc.isEmpty()) embedBuilder.setDescription(_desc);
+                    if (!_title.isEmpty())
+                        embedBuilder.setTitle(_title);
+                    if (!_desc.isEmpty())
+                        embedBuilder.setDescription(_desc);
 
                     if (useAuthor) {
                         String authorTextTpl = null;
-                        try { authorTextTpl = config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_EMBED_AUTHOR_TEXT).asString(); } catch (Throwable ignored) {}
+                        try {
+                            authorTextTpl = config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_EMBED_AUTHOR_TEXT).asString();
+                        } catch (Throwable ignored) {
+                        }
                         String authorText;
                         if (authorTextTpl != null && !authorTextTpl.isBlank()) {
                             authorText = authorTextTpl
                                     .replace("%player%", chatMessageData.getPlayerName())
-                                    .replace("%server%", aliasedServer == null ? "" : Helper.escapeString(aliasedServer))
-                                    .replace("%original_server%", originalServer == null ? "" : Helper.escapeString(originalServer))
+                                    .replace("%server%",
+                                            aliasedServer == null ? "" : Helper.escapeString(aliasedServer))
+                                    .replace("%original_server%",
+                                            originalServer == null ? "" : Helper.escapeString(originalServer))
                                     .replace("%title%", _title)
                                     .replace("%description%", _desc);
                             authorText = Helper.sanitize(authorText).trim();
@@ -180,7 +205,11 @@ public class ChatHandler {
                         String authorIcon = null;
                         if (useAuthorIcon) {
                             String iconTpl = null;
-                            try { iconTpl = config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_EMBED_AUTHOR_ICON_URL).asString(); } catch (Throwable ignored) {}
+                            try {
+                                iconTpl = config.get(ConfigKey.DISCORD_YEP_ADVANCEMENT_EMBED_AUTHOR_ICON_URL)
+                                        .asString();
+                            } catch (Throwable ignored) {
+                            }
                             if (iconTpl != null && !iconTpl.isBlank()) {
                                 String uuid = chatMessageData.getPlayerUUID().toString();
                                 String uuidNoDashes = uuid.replace("-", "");
@@ -206,7 +235,8 @@ public class ChatHandler {
                 String originalServer = chatMessageData.getServername();
                 String aliasedServer = Helper.convertAlias(config, originalServer);
                 // Resolve events webhook (single URL)
-                String eventsUrl = java.util.Optional.ofNullable(config.get(ConfigKey.DISCORD_EVENTS_WEBHOOK_URL).asString()).orElse("");
+                String eventsUrl = java.util.Optional
+                        .ofNullable(config.get(ConfigKey.DISCORD_EVENTS_WEBHOOK_URL).asString()).orElse("");
 
                 if (eventsUrl != null && !eventsUrl.isBlank()) {
                     webhookSender.sendEventEmbed(
@@ -217,8 +247,7 @@ public class ChatHandler {
                             MessageType.DEATH,
                             discordEmbedTitle,
                             discordEmbedMessage,
-                            chatMessageData.getMessage()
-                    );
+                            chatMessageData.getMessage());
                 } else {
                     // Fallback to bot embed (no webhooks)
                     java.awt.Color color = config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_COLOR).asColor();
@@ -227,25 +256,38 @@ public class ChatHandler {
                     // Respect messages.yml death embed toggles
                     boolean useAuthor = true;
                     boolean useAuthorIcon = true;
-                    try { useAuthor = config.get(ConfigKey.DISCORD_YEP_DEATH_EMBED_USE_AUTHOR).asBoolean(); } catch (Throwable ignored) {}
-                    try { useAuthorIcon = config.get(ConfigKey.DISCORD_YEP_DEATH_EMBED_USE_AUTHOR_ICON).asBoolean(); } catch (Throwable ignored) {}
+                    try {
+                        useAuthor = config.get(ConfigKey.DISCORD_YEP_DEATH_EMBED_USE_AUTHOR).asBoolean();
+                    } catch (Throwable ignored) {
+                    }
+                    try {
+                        useAuthorIcon = config.get(ConfigKey.DISCORD_YEP_DEATH_EMBED_USE_AUTHOR_ICON).asBoolean();
+                    } catch (Throwable ignored) {
+                    }
 
                     // Title/Description from passed-in values (already formatted for event)
                     String _title = java.util.Optional.ofNullable(discordEmbedTitle).orElse("").trim();
                     String _desc = java.util.Optional.ofNullable(discordEmbedMessage).orElse("").trim();
-                    if (!_title.isEmpty()) embedBuilder.setTitle(_title);
-                    if (!_desc.isEmpty()) embedBuilder.setDescription(_desc);
+                    if (!_title.isEmpty())
+                        embedBuilder.setTitle(_title);
+                    if (!_desc.isEmpty())
+                        embedBuilder.setDescription(_desc);
 
                     if (useAuthor) {
                         String authorTextTpl = null;
-                        try { authorTextTpl = config.get(ConfigKey.DISCORD_YEP_DEATH_EMBED_AUTHOR_TEXT).asString(); } catch (Throwable ignored) {}
+                        try {
+                            authorTextTpl = config.get(ConfigKey.DISCORD_YEP_DEATH_EMBED_AUTHOR_TEXT).asString();
+                        } catch (Throwable ignored) {
+                        }
                         String authorText;
                         if (authorTextTpl != null && !authorTextTpl.isBlank()) {
                             String raw = chatMessageData.getMessage();
                             authorText = authorTextTpl
                                     .replace("%player%", chatMessageData.getPlayerName())
-                                    .replace("%server%", aliasedServer == null ? "" : Helper.escapeString(aliasedServer))
-                                    .replace("%original_server%", originalServer == null ? "" : Helper.escapeString(originalServer))
+                                    .replace("%server%",
+                                            aliasedServer == null ? "" : Helper.escapeString(aliasedServer))
+                                    .replace("%original_server%",
+                                            originalServer == null ? "" : Helper.escapeString(originalServer))
                                     .replace("%death_message%", (raw == null || raw.isBlank()) ? _title : raw);
                             authorText = Helper.sanitize(authorText).trim();
                         } else {
@@ -254,7 +296,10 @@ public class ChatHandler {
                         String authorIcon = null;
                         if (useAuthorIcon) {
                             String iconTpl = null;
-                            try { iconTpl = config.get(ConfigKey.DISCORD_YEP_DEATH_EMBED_AUTHOR_ICON_URL).asString(); } catch (Throwable ignored) {}
+                            try {
+                                iconTpl = config.get(ConfigKey.DISCORD_YEP_DEATH_EMBED_AUTHOR_ICON_URL).asString();
+                            } catch (Throwable ignored) {
+                            }
                             if (iconTpl != null && !iconTpl.isBlank()) {
                                 String uuid = chatMessageData.getPlayerUUID().toString();
                                 String uuidNoDashes = uuid.replace("-", "");
@@ -283,14 +328,14 @@ public class ChatHandler {
                 if ("webhook".equals(mode)) {
                     String originalServer = chatMessageData.getServername();
                     String aliasedServer = Helper.convertAlias(config, originalServer);
-                    // Plain webhook message: username = player, avatar = player, content = discordMessage
+                    // Plain webhook message: username = player, avatar = player, content =
+                    // discordMessage
                     webhookSender.send(
                             chatMessageData.getPlayerUUID(),
                             chatMessageData.getPlayerName(),
                             aliasedServer,
                             originalServer,
-                            discordMessage
-                    );
+                            discordMessage);
                 } else if ("embed".equals(mode)) {
                     Color color = config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_COLOR).asColor();
 
@@ -336,7 +381,8 @@ public class ChatHandler {
     }
 
     public void runProxyChatMessage(ChatMessageData chatMessageData) {
-        if (Helper.serverHasChatLocked(plugin, chatMessageData.getServername())) return;
+        if (Helper.serverHasChatLocked(plugin, chatMessageData.getServername()))
+            return;
 
         String playerMessage = chatMessageData.getMessage();
         String serverName = chatMessageData.getServername();
@@ -344,7 +390,8 @@ public class ChatHandler {
         UUID playerUUID = chatMessageData.getPlayerUUID();
 
         Optional<String> optionalPlayerMessage = getValidMessage(playerMessage);
-        if (optionalPlayerMessage.isEmpty()) return;
+        if (optionalPlayerMessage.isEmpty())
+            return;
         playerMessage = optionalPlayerMessage.get();
 
         // Apply word filter before any linkification or formatting
@@ -395,7 +442,8 @@ public class ChatHandler {
 
         minecraftMessage = replacePrefixSuffix(minecraftMessage, playerUUID, aliasedServerName, serverName);
         discordMessage = replacePrefixSuffix(discordMessage, playerUUID, aliasedServerName, serverName);
-        discordEmbedTitle = replacePrefixSuffix(discordEmbedTitle, chatMessageData.getPlayerUUID(), aliasedServerName, chatMessageData.getServername());
+        discordEmbedTitle = replacePrefixSuffix(discordEmbedTitle, chatMessageData.getPlayerUUID(), aliasedServerName,
+                chatMessageData.getServername());
 
         if (config.get(ConfigKey.USE_HELPER).asBoolean()) {
             chatMessageData.setMinecraftMessage(minecraftMessage);
@@ -413,7 +461,8 @@ public class ChatHandler {
 
     // Applies filtering to non-URL parts of the text
     private String applyFilter(String text) {
-        if (!config.isFilterEnabled() || text == null || text.isEmpty()) return text;
+        if (!config.isFilterEnabled() || text == null || text.isEmpty())
+            return text;
         Matcher m = URL_PATTERN.matcher(text);
         StringBuilder out = new StringBuilder();
         int last = 0;
@@ -428,26 +477,33 @@ public class ChatHandler {
     }
 
     private String applyFilterPlain(String input) {
-        if (input.isEmpty()) return input;
+        if (input.isEmpty())
+            return input;
         String result = input;
 
-        // Build combined replacement map: specific replacements + global words -> default
+        // Build combined replacement map: specific replacements + global words ->
+        // default
         Map<String, String> combined = new LinkedHashMap<>();
-        Map<String, String> specific = Optional.ofNullable(config.getFilterReplacements()).orElseGet(Collections::emptyMap);
+        Map<String, String> specific = Optional.ofNullable(config.getFilterReplacements())
+                .orElseGet(Collections::emptyMap);
         combined.putAll(specific);
         List<String> globals = Optional.ofNullable(config.getFilterGlobalWords()).orElseGet(Collections::emptyList);
         for (String gw : globals) {
-            if (!combined.containsKey(gw)) combined.put(gw, config.getFilterDefaultReplacement());
+            if (!combined.containsKey(gw))
+                combined.put(gw, config.getFilterDefaultReplacement());
         }
 
-        if (combined.isEmpty()) return result;
+        if (combined.isEmpty())
+            return result;
 
         int flags = 0;
-        if (config.isFilterCaseInsensitive()) flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+        if (config.isFilterCaseInsensitive())
+            flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
 
         for (Map.Entry<String, String> e : combined.entrySet()) {
             String key = e.getKey();
-            if (key == null || key.isEmpty()) continue;
+            if (key == null || key.isEmpty())
+                continue;
             String replacement = e.getValue() == null ? "" : e.getValue();
             String core = Pattern.quote(key);
             String pattern = config.isFilterWholeWord() ? "\\b" + core + "\\b" : core;
@@ -456,23 +512,57 @@ public class ChatHandler {
         return result;
     }
 
+    // Maximum time allowed for a single regex replacement (ms)
+    private static final long REGEX_TIMEOUT_MS = 100;
+
     private String applyRegexRules(String text, boolean forMinecraft) {
-        if (text == null || text.isEmpty() || compiledRegexCache.isEmpty()) return text;
-        
+        if (text == null || text.isEmpty() || compiledRegexCache.isEmpty())
+            return text;
+
         String result = text;
         // Use cached compiled patterns for better performance
         for (CompiledRegexRule rule : compiledRegexCache) {
             String repl = forMinecraft ? rule.replacementMinecraft : rule.replacementDiscord;
             try {
-                // Use Matcher.quoteReplacement to properly escape special characters in replacement string
-                result = rule.pattern.matcher(result).replaceAll(Matcher.quoteReplacement(repl));
-            } catch (Exception ignored) { }
+                result = safeReplaceAll(rule.pattern, result, repl);
+            } catch (Exception e) {
+                plugin.log("[DEBUG] Regex rule failed: " + rule.pattern.pattern() + " - " + e.getMessage());
+            }
         }
         return result;
     }
 
+    /**
+     * Performs a regex replacement with timeout protection against ReDoS attacks.
+     * Uses an interruptible approach to prevent catastrophic backtracking from
+     * blocking.
+     */
+    private String safeReplaceAll(Pattern pattern, String input, String replacement) {
+        final String[] resultHolder = { input };
+        final Thread workerThread = new Thread(() -> {
+            try {
+                resultHolder[0] = pattern.matcher(input).replaceAll(Matcher.quoteReplacement(replacement));
+            } catch (Exception ignored) {
+            }
+        });
+
+        workerThread.start();
+        try {
+            workerThread.join(REGEX_TIMEOUT_MS);
+            if (workerThread.isAlive()) {
+                workerThread.interrupt();
+                plugin.log("[WARNING] Regex pattern timed out (potential ReDoS): " + pattern.pattern());
+                return input; // Return original input on timeout
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return input;
+        }
+        return resultHolder[0];
+    }
+
     public void runProxyLeaveMessage(String playerName, UUID playerUUID, String serverName,
-                                     BiConsumer<String, Permission> minecraftLogger) {
+            BiConsumer<String, Permission> minecraftLogger) {
         String configString = config.get(ConfigKey.MINECRAFT_LEAVE).asString();
         String discordConfigString = config.get(ConfigKey.DISCORD_LEAVE_MESSAGE).asString();
 
@@ -487,10 +577,12 @@ public class ChatHandler {
                 .withPluginPrefix();
 
         String message = replacePrefixSuffix(builder.apply(configString), playerUUID, aliasedServerName, serverName);
-        String discordMessage = replacePrefixSuffix(builder.apply(discordConfigString), playerUUID, aliasedServerName, serverName);
+        String discordMessage = replacePrefixSuffix(builder.apply(discordConfigString), playerUUID, aliasedServerName,
+                serverName);
 
         // Log to Console
-        if (config.get(ConfigKey.CONSOLE_LEAVE).asBoolean()) plugin.log(message);
+        if (config.get(ConfigKey.CONSOLE_LEAVE).asBoolean())
+            plugin.log(message);
 
         // Log to Discord
         DISCORD_SENT: if (config.get(ConfigKey.DISCORD_LEAVE_ENABLED).asBoolean()) {
@@ -501,7 +593,8 @@ public class ChatHandler {
             }
 
             EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordMessage).setColor(Color.RED);
-            if (config.get(ConfigKey.DISCORD_LEAVE_USE_TIMESTAMP).asBoolean()) embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
+            if (config.get(ConfigKey.DISCORD_LEAVE_USE_TIMESTAMP).asBoolean())
+                embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
             String overrideId = resolveOverrideChannelId(MessageType.LEAVE);
             discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
         }
@@ -514,7 +607,7 @@ public class ChatHandler {
     }
 
     public void runProxyJoinMessage(String playerName, UUID playerUUID, String serverName,
-                                    BiConsumer<String, Permission> minecraftLogger) {
+            BiConsumer<String, Permission> minecraftLogger) {
         String configString = config.get(ConfigKey.MINECRAFT_JOIN).asString();
         String discordConfigString = config.get(ConfigKey.DISCORD_JOIN_MESSAGE).asString();
 
@@ -529,10 +622,12 @@ public class ChatHandler {
                 .withPluginPrefix();
 
         String message = replacePrefixSuffix(builder.apply(configString), playerUUID, aliasedServerName, serverName);
-        String discordMessage = replacePrefixSuffix(builder.apply(discordConfigString), playerUUID, aliasedServerName, serverName);
+        String discordMessage = replacePrefixSuffix(builder.apply(discordConfigString), playerUUID, aliasedServerName,
+                serverName);
 
         // Log to Console
-        if (config.get(ConfigKey.CONSOLE_JOIN).asBoolean()) plugin.log(message);
+        if (config.get(ConfigKey.CONSOLE_JOIN).asBoolean())
+            plugin.log(message);
 
         // Log to Discord
         DISCORD_SENT: if (config.get(ConfigKey.DISCORD_JOIN_ENABLED).asBoolean()) {
@@ -543,7 +638,8 @@ public class ChatHandler {
             }
 
             EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordMessage).setColor(Color.GREEN);
-            if (config.get(ConfigKey.DISCORD_JOIN_USE_TIMESTAMP).asBoolean()) embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
+            if (config.get(ConfigKey.DISCORD_JOIN_USE_TIMESTAMP).asBoolean())
+                embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
             String overrideId = resolveOverrideChannelId(MessageType.JOIN);
             discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
         }
@@ -561,15 +657,17 @@ public class ChatHandler {
     }
 
     private void sendFirstJoinAnnouncement(String playerName, UUID playerUUID, String aliasedServerName,
-                                           String serverName, MessageFormatter.ReplacementBuilder builder,
-                                           BiConsumer<String, Permission> minecraftLogger) {
+            String serverName, MessageFormatter.ReplacementBuilder builder,
+            BiConsumer<String, Permission> minecraftLogger) {
         // Send to Minecraft
         if (config.get(ConfigKey.MINECRAFT_FIRST_JOIN_ENABLED).asBoolean()) {
             String firstJoinTemplate = config.get(ConfigKey.MINECRAFT_FIRST_JOIN_MESSAGE).asString();
-            String firstJoinMessage = replacePrefixSuffix(builder.apply(firstJoinTemplate), playerUUID, aliasedServerName, serverName);
-            
-            if (config.get(ConfigKey.CONSOLE_JOIN).asBoolean()) plugin.log("[First Join] " + firstJoinMessage);
-            
+            String firstJoinMessage = replacePrefixSuffix(builder.apply(firstJoinTemplate), playerUUID,
+                    aliasedServerName, serverName);
+
+            if (config.get(ConfigKey.CONSOLE_JOIN).asBoolean())
+                plugin.log("[First Join] " + firstJoinMessage);
+
             if (config.get(ConfigKey.MINECRAFT_JOIN_PROXY_SEND).asBoolean()) {
                 minecraftLogger.accept(firstJoinMessage, Permission.READ_JOIN_MESSAGE);
             }
@@ -578,12 +676,14 @@ public class ChatHandler {
         // Send to Discord
         if (config.get(ConfigKey.DISCORD_FIRST_JOIN_ENABLED).asBoolean()) {
             String discordFirstJoinTemplate = config.get(ConfigKey.DISCORD_FIRST_JOIN_MESSAGE).asString();
-            String discordFirstJoinMessage = replacePrefixSuffix(builder.apply(discordFirstJoinTemplate), playerUUID, aliasedServerName, serverName);
-            
+            String discordFirstJoinMessage = replacePrefixSuffix(builder.apply(discordFirstJoinTemplate), playerUUID,
+                    aliasedServerName, serverName);
+
             String overrideId = resolveOverrideChannelId(MessageType.JOIN);
-            
+
             if (config.get(ConfigKey.DISCORD_JOIN_USE_EMBED).asBoolean()) {
-                EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordFirstJoinMessage).setColor(Color.CYAN);
+                EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordFirstJoinMessage)
+                        .setColor(Color.CYAN);
                 if (config.get(ConfigKey.DISCORD_JOIN_USE_TIMESTAMP).asBoolean()) {
                     embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
                 }
@@ -595,7 +695,7 @@ public class ChatHandler {
     }
 
     public void runProxySwitchMessage(String from, String to, String playerName, UUID playerUUID,
-                                      Consumer<String> minecraftLogger, Consumer<String> playerLogger) {
+            Consumer<String> minecraftLogger, Consumer<String> playerLogger) {
         String consoleConfigString = config.get(ConfigKey.MINECRAFT_SWITCH_DEFAULT).asString();
         String discordConfigString = config.get(ConfigKey.DISCORD_SWITCH_MESSAGE).asString();
         String minecraftConfigString = config.get(ConfigKey.MINECRAFT_SWITCH_SHORT).asString();
@@ -617,7 +717,8 @@ public class ChatHandler {
         String minecraftMessage = replacePrefixSuffix(builder.apply(minecraftConfigString), playerUUID, aliasedTo, to);
 
         // Log to Console
-        if (config.get(ConfigKey.CONSOLE_SWITCH).asBoolean()) plugin.log(consoleMessage);
+        if (config.get(ConfigKey.CONSOLE_SWITCH).asBoolean())
+            plugin.log(consoleMessage);
 
         // Log to Discord
         DISCORD_SENT: if (config.get(ConfigKey.DISCORD_SWITCH_ENABLED).asBoolean()) {
@@ -628,7 +729,8 @@ public class ChatHandler {
             }
 
             EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordMessage).setColor(Color.YELLOW);
-            if (config.get(ConfigKey.DISCORD_SWITCH_USE_TIMESTAMP).asBoolean()) embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
+            if (config.get(ConfigKey.DISCORD_SWITCH_USE_TIMESTAMP).asBoolean())
+                embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
             String overrideId = resolveOverrideChannelId(MessageType.SWITCH);
             discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
         }
@@ -644,8 +746,9 @@ public class ChatHandler {
 
     /**
      * Creates a sanitized {@link EmbedBuilder} based on the message.
+     * 
      * @param playerUUID The {@link UUID} of the in-game player.
-     * @param message The {@link String} message to send in the Discord server.
+     * @param message    The {@link String} message to send in the Discord server.
      * @return A sanitized {@link EmbedBuilder} containing the contents.
      */
     private EmbedBuilder simpleAuthorEmbedBuilder(UUID playerUUID, String message) {
@@ -662,7 +765,8 @@ public class ChatHandler {
     private String resolveOverrideChannelId(MessageType type) {
         try {
             Map<String, String> map = config.get(ConfigKey.DISCORD_CHANNEL_OVERRIDE).asStringMap();
-            if (map == null || map.isEmpty()) return null;
+            if (map == null || map.isEmpty())
+                return null;
             String key;
             switch (type) {
                 case CHAT -> key = "chat";
@@ -673,9 +777,11 @@ public class ChatHandler {
                 case DEATH -> key = "death";
                 default -> key = null;
             }
-            if (key == null) return null;
+            if (key == null)
+                return null;
             String id = map.getOrDefault(key, null);
-            if (id == null) return null;
+            if (id == null)
+                return null;
             id = id.trim();
             return id.isEmpty() ? null : id;
         } catch (Throwable ignored) {
@@ -686,13 +792,15 @@ public class ChatHandler {
     public void sendFromDiscord(MessageReceivedEvent event) {
         String message = config.get(ConfigKey.DISCORD_CHAT_MINECRAFT_MESSAGE).asString();
 
-        if (event.getMember() == null) return;
+        if (event.getMember() == null)
+            return;
 
         String username = event.getMember().getUser().getName();
         String nickname = event.getMember().getNickname();
         String displayName = event.getMember().getEffectiveName();
 
-        if (nickname == null) nickname = username;
+        if (nickname == null)
+            nickname = username;
 
         String roleName = "[no-role]";
         Color roleColor = Color.GRAY;
@@ -700,7 +808,8 @@ public class ChatHandler {
             Role role = event.getMember().getRoles().get(0);
             roleName = role.getName();
 
-            if (role.getColor() != null) roleColor = role.getColor();
+            if (role.getColor() != null)
+                roleColor = role.getColor();
         }
 
         String discordMessage = event.getMessage().getContentStripped();
@@ -718,8 +827,11 @@ public class ChatHandler {
                 String url = attachments.get(i).getUrl();
                 String escapedUrl = url.replace("\"", "\\\"");
                 String label = attachments.size() == 1 ? "Attachment" : ("Attachment " + (i + 1));
-                if (i > 0) sb.append(" ");
-                sb.append(String.format("<click:open_url:\"%s\"><hover:show_text:\"Click to open attachment\"><dark_gray>[</dark_gray><aqua>%s<dark_gray>]</hover></click>", escapedUrl, label));
+                if (i > 0)
+                    sb.append(" ");
+                sb.append(String.format(
+                        "<click:open_url:\"%s\"><hover:show_text:\"Click to open attachment\"><dark_gray>[</dark_gray><aqua>%s<dark_gray>]</hover></click>",
+                        escapedUrl, label));
             }
             if (!textMc.isEmpty()) {
                 attachmentsMc = (attachments.size() > 1 ? "\n" : " ") + sb;
@@ -737,7 +849,9 @@ public class ChatHandler {
         String discordTag;
         if (discordInvite != null && !discordInvite.trim().isEmpty()) {
             String inviteEscaped = discordInvite.replace("\"", "\\\"");
-            discordTag = String.format("<click:open_url:\"%s\"><hover:show_text:\"Join our Discord\"><dark_gray>[</dark_gray><aqua>Discord</aqua><dark_gray>]</hover></click>", inviteEscaped);
+            discordTag = String.format(
+                    "<click:open_url:\"%s\"><hover:show_text:\"Join our Discord\"><dark_gray>[</dark_gray><aqua>Discord</aqua><dark_gray>]</hover></click>",
+                    inviteEscaped);
         } else {
             // Fallback to plain colored tag if no invite is set
             discordTag = "&8[&bDiscord&8]";
@@ -753,18 +867,21 @@ public class ChatHandler {
                 Tuple.of("discord-tag", discordTag),
                 Tuple.of("epoch", String.valueOf(EpochHelper.getEpochSecond())),
                 Tuple.of("time", messageFormatter.getTimeString()),
-                Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString())
-        );
+                Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString()));
 
-        if (config.get(ConfigKey.MINECRAFT_DISCORD_ENABLED).asBoolean()) plugin.sendAll(message);
+        if (config.get(ConfigKey.MINECRAFT_DISCORD_ENABLED).asBoolean())
+            plugin.sendAll(message);
     }
 
     private List<String> getPrefixBasedOnServerContext(User user, String... serverKeys) {
         return user.resolveInheritedNodes(QueryOptions.nonContextual())
                 .stream()
                 .filter((node) -> {
-                    if (!node.getContexts().containsKey("server")) return true;
-                    for (String key : serverKeys) if (node.getContexts().contains("server", key)) return true;
+                    if (!node.getContexts().containsKey("server"))
+                        return true;
+                    for (String key : serverKeys)
+                        if (node.getContexts().contains("server", key))
+                            return true;
                     return false;
                 })
                 .filter(Node::getValue)
@@ -772,16 +889,18 @@ public class ChatHandler {
                 .map(NodeType.PREFIX::cast)
                 .map(PrefixNode::getKey)
                 .map(prefix -> prefix.replace("prefix.", "")) // 200.Owner.is.awesome
-                .map(prefix -> prefix.split("\\."))  // [200, Owner, is, awesome]
-                .sorted((left, right) -> {  // Sorting it properly.
+                .map(prefix -> prefix.split("\\.")) // [200, Owner, is, awesome]
+                .sorted((left, right) -> { // Sorting it properly.
                     try {
                         Integer leftWeight = Integer.parseInt(left[0]);
                         Integer rightWeight = Integer.parseInt(right[0]);
 
                         return rightWeight.compareTo(leftWeight);
-                    } catch (NumberFormatException e) { return 0; }
+                    } catch (NumberFormatException e) {
+                        return 0;
+                    }
                 })
-                .map(prefix -> Arrays.stream(prefix).skip(1).collect(Collectors.joining(".")))  // Owner.is.awesome
+                .map(prefix -> Arrays.stream(prefix).skip(1).collect(Collectors.joining("."))) // Owner.is.awesome
                 .toList();
     }
 
@@ -789,8 +908,11 @@ public class ChatHandler {
         return user.resolveInheritedNodes(QueryOptions.nonContextual())
                 .stream()
                 .filter((node) -> {
-                    if (!node.getContexts().containsKey("server")) return true;
-                    for (String key : serverKeys) if (node.getContexts().contains("server", key)) return true;
+                    if (!node.getContexts().containsKey("server"))
+                        return true;
+                    for (String key : serverKeys)
+                        if (node.getContexts().contains("server", key))
+                            return true;
                     return false;
                 })
                 .filter(Node::getValue)
@@ -798,32 +920,47 @@ public class ChatHandler {
                 .map(NodeType.SUFFIX::cast)
                 .map(SuffixNode::getKey)
                 .map(suffix -> suffix.replace("suffix.", "")) // 200.Owner.is.awesome
-                .map(suffix -> suffix.split("\\."))  // [200, Owner, is, awesome]
-                .sorted((left, right) -> {  // Sorting it properly.
+                .map(suffix -> suffix.split("\\.")) // [200, Owner, is, awesome]
+                .sorted((left, right) -> { // Sorting it properly.
                     try {
                         Integer leftWeight = Integer.parseInt(left[0]);
                         Integer rightWeight = Integer.parseInt(right[0]);
 
                         return rightWeight.compareTo(leftWeight);
-                    } catch (NumberFormatException e) { return 0; }
+                    } catch (NumberFormatException e) {
+                        return 0;
+                    }
                 })
-                .map(suffix -> Arrays.stream(suffix).skip(1).collect(Collectors.joining(".")))  // Owner.is.awesome
+                .map(suffix -> Arrays.stream(suffix).skip(1).collect(Collectors.joining("."))) // Owner.is.awesome
                 .toList();
     }
 
     private String replacePrefixSuffix(String message, UUID playerUUID, String aliasedServerName, String serverName) {
-        if (!this.plugin.isLuckPermsEnabled()) return message;
+        if (!this.plugin.isLuckPermsEnabled())
+            return message;
 
         return this.plugin.getLuckPerms().map(LuckPerms.class::cast).map((luckPerms) -> {
-            User user = null;
+            User user;
             try {
-                user = luckPerms.getUserManager().loadUser(playerUUID).get();
+                // Use a short timeout to prevent blocking the main thread
+                // LuckPerms caches online players, so this should be fast for them
+                user = luckPerms.getUserManager().loadUser(playerUUID)
+                        .orTimeout(50, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        .join();
+            } catch (java.util.concurrent.CompletionException e) {
+                if (e.getCause() instanceof java.util.concurrent.TimeoutException) {
+                    plugin.log("[DEBUG] LuckPerms prefix/suffix lookup timed out for " + playerUUID);
+                } else {
+                    plugin.log("Error contacting the LuckPerms API: " + e.getMessage());
+                }
+                return message;
             } catch (Exception e) {
                 plugin.log("Error contacting the LuckPerms API: " + e.getMessage());
                 return message;
             }
 
-            // Get prefix based on aliased name. If none show up, use original name. If none show up, use top prefix.
+            // Get prefix based on aliased name. If none show up, use original name. If none
+            // show up, use top prefix.
             List<String> prefixList = getPrefixBasedOnServerContext(user, serverName, aliasedServerName, "");
             List<String> suffixList = getSuffixBasedOnServerContext(user, serverName, aliasedServerName, "");
 

@@ -34,28 +34,34 @@ public class VelocityUnbanCommand implements SimpleCommand {
         }
 
         String playerName = invocation.arguments()[0];
-        plugin.getBanHelper().removeBan(playerName);
 
-        String unbannedMessage = config.get(ConfigKey.MINECRAFT_COMMAND_PROXY_BAN_UNBANNED).asString();
-        unbannedMessage = Helper.replaceKeys(
-                unbannedMessage,
-                Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString()),
-                Tuple.of("player", playerName)
-        );
+        // Try to remove by name (searches the UUID->name map)
+        boolean removed = plugin.getBanHelper().removeBanByName(playerName);
 
-        invocation.source().sendMessage(Helper.stringToComponent(unbannedMessage));
+        if (removed) {
+            String unbannedMessage = config.get(ConfigKey.MINECRAFT_COMMAND_PROXY_BAN_UNBANNED).asString();
+            unbannedMessage = Helper.replaceKeys(
+                    unbannedMessage,
+                    Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString()),
+                    Tuple.of("player", playerName));
+            invocation.source().sendMessage(Helper.stringToComponent(unbannedMessage));
+        } else {
+            invocation.source().sendMessage(Helper.stringToComponent(
+                    "&cPlayer '" + playerName + "' was not found in the ban list."));
+        }
     }
 
     @Override
     public List<String> suggest(Invocation invocation) {
         if (invocation.arguments().length == 0) {
-            return plugin.getBanHelper().getBannedPlayers();
+            return plugin.getBanHelper().getBannedPlayerNames();
         }
 
         if (invocation.arguments().length == 1) {
-            return plugin.getBanHelper().getBannedPlayers()
+            return plugin.getBanHelper().getBannedPlayerNames()
                     .stream()
-                    .filter((bannedPlayer) -> bannedPlayer.toLowerCase().startsWith(invocation.arguments()[0].toLowerCase()))
+                    .filter((bannedPlayer) -> bannedPlayer.toLowerCase()
+                            .startsWith(invocation.arguments()[0].toLowerCase()))
                     .toList();
         }
 
@@ -66,5 +72,4 @@ public class VelocityUnbanCommand implements SimpleCommand {
     public boolean hasPermission(Invocation invocation) {
         return invocation.source().hasPermission(Permission.COMMAND_BAN.getPermissionNode());
     }
-
 }

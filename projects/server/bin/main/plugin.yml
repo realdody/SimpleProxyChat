@@ -1,0 +1,10 @@
+name: SimpleProxyChatHelper
+version: '${version}'
+main: com.beanbeanjuice.simpleproxychathelper.SimpleProxyChatHelper
+prefix: SimpleProxyChatHelper
+load: STARTUP
+softdepend: [PlaceholderAPI]
+authors: [beanbeanjuice]
+description: A helper plugin for the SimpleProxyChat proxy plugin.
+website: https://www.github.com/beanbeanjuice/SimpleProxyChat
+api-version: 1.13
