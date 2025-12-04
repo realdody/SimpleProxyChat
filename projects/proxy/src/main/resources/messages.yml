@@ -14,6 +14,9 @@ minecraft:
     enabled: true
     proxy-send: true
     message: "&e%player% &ahas joined the network. (%server%)"
+    first-time:
+      enabled: true
+      message: "&6&l★ &eWelcome &b%player% &eto the server for the first time! &6&l★"
     recipients:
       exclude-self: false
       exclude-server: false # excludes every player but the sender
@@ -97,6 +100,9 @@ discord:
     use-timestamp: true
     # Incompatible with use-timestamp.
     use-embed: true
+    first-time:
+      enabled: true
+      message: "🎉 Welcome **%player%** to the server for the first time!"
   leave:
     enabled: true
     message: "%player% has left the network. (%server%)"
@@ -204,5 +210,5 @@ console:
 update-message: "&7There is an update! You are on &c%old%. New version is &a%new%&7: &6%link%"
 
 # DO NOT TOUCH THIS
-file-version: 19
+file-version: 20
 

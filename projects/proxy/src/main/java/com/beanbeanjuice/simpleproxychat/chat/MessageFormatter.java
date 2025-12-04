@@ -114,6 +114,25 @@ public class MessageFormatter {
         }
 
         /**
+         * Adds death message placeholder (%death_message%) for YepLib death events.
+         */
+        public ReplacementBuilder withDeathMessage(String deathMessage) {
+            replacements.add(Tuple.of("death_message", deathMessage));
+            return this;
+        }
+
+        /**
+         * Adds advancement placeholders for YepLib advancement events.
+         * (%title%, %description%, %advancement_type%)
+         */
+        public ReplacementBuilder withAdvancement(String title, String description, String advancementType) {
+            replacements.add(Tuple.of("title", title));
+            replacements.add(Tuple.of("description", description));
+            replacements.add(Tuple.of("advancement_type", advancementType));
+            return this;
+        }
+
+        /**
          * Adds a custom placeholder.
          */
         public ReplacementBuilder with(String key, String value) {

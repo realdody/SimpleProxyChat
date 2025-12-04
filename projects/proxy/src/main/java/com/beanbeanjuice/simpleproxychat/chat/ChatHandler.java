@@ -553,6 +553,45 @@ public class ChatHandler {
                 && config.get(ConfigKey.MINECRAFT_JOIN_PROXY_SEND).asBoolean()) {
             minecraftLogger.accept(message, Permission.READ_JOIN_MESSAGE);
         }
+
+        // Check for first-time join and send special announcement
+        if (plugin.getFirstJoinTracker().isFirstJoin(playerUUID)) {
+            sendFirstJoinAnnouncement(playerName, playerUUID, aliasedServerName, serverName, builder, minecraftLogger);
+        }
+    }
+
+    private void sendFirstJoinAnnouncement(String playerName, UUID playerUUID, String aliasedServerName,
+                                           String serverName, MessageFormatter.ReplacementBuilder builder,
+                                           BiConsumer<String, Permission> minecraftLogger) {
+        // Send to Minecraft
+        if (config.get(ConfigKey.MINECRAFT_FIRST_JOIN_ENABLED).asBoolean()) {
+            String firstJoinTemplate = config.get(ConfigKey.MINECRAFT_FIRST_JOIN_MESSAGE).asString();
+            String firstJoinMessage = replacePrefixSuffix(builder.apply(firstJoinTemplate), playerUUID, aliasedServerName, serverName);
+            
+            if (config.get(ConfigKey.CONSOLE_JOIN).asBoolean()) plugin.log("[First Join] " + firstJoinMessage);
+            
+            if (config.get(ConfigKey.MINECRAFT_JOIN_PROXY_SEND).asBoolean()) {
+                minecraftLogger.accept(firstJoinMessage, Permission.READ_JOIN_MESSAGE);
+            }
+        }
+
+        // Send to Discord
+        if (config.get(ConfigKey.DISCORD_FIRST_JOIN_ENABLED).asBoolean()) {
+            String discordFirstJoinTemplate = config.get(ConfigKey.DISCORD_FIRST_JOIN_MESSAGE).asString();
+            String discordFirstJoinMessage = replacePrefixSuffix(builder.apply(discordFirstJoinTemplate), playerUUID, aliasedServerName, serverName);
+            
+            String overrideId = resolveOverrideChannelId(MessageType.JOIN);
+            
+            if (config.get(ConfigKey.DISCORD_JOIN_USE_EMBED).asBoolean()) {
+                EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordFirstJoinMessage).setColor(Color.CYAN);
+                if (config.get(ConfigKey.DISCORD_JOIN_USE_TIMESTAMP).asBoolean()) {
+                    embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
+                }
+                discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
+            } else {
+                discordBot.sendMessageToChannelId(overrideId, discordFirstJoinMessage);
+            }
+        }
     }
 
     public void runProxySwitchMessage(String from, String to, String playerName, UUID playerUUID,

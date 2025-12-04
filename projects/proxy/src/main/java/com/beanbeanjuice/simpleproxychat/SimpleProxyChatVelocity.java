@@ -22,6 +22,7 @@ import com.beanbeanjuice.simpleproxychat.utility.listeners.velocity.VelocityServ
 import com.beanbeanjuice.simpleproxychat.discord.Bot;
 import com.beanbeanjuice.simpleproxychat.discord.DiscordSlashCommandHandler;
 import com.beanbeanjuice.simpleproxychat.utility.helper.Helper;
+import com.beanbeanjuice.simpleproxychat.utility.helper.FirstJoinTracker;
 import com.beanbeanjuice.simpleproxychat.utility.config.Config;
 import com.beanbeanjuice.simpleproxychat.utility.config.ConfigKey;
 import com.velocitypowered.api.command.CommandManager;
@@ -65,6 +66,7 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
     @Getter private BanHelper banHelper;
     private Metrics metrics;
     @Getter private VelocityServerListener serverListener;
+    @Getter private FirstJoinTracker firstJoinTracker;
 
     private PluginManager pluginManager;
 
@@ -82,6 +84,7 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
         this.pluginManager = this.proxyServer.getPluginManager();
         this.config = new Config(dataDirectory.toFile());
         this.config.initialize();
+        this.firstJoinTracker = new FirstJoinTracker(dataDirectory.toFile());
 
         // Plugin enabled.
         this.getLogger().info("Plugin has been initialized.");
