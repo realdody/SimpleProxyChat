@@ -9,6 +9,7 @@ import com.beanbeanjuice.simpleproxychat.utility.helper.Helper;
 import com.beanbeanjuice.simpleproxychat.utility.Tuple;
 import com.beanbeanjuice.simpleproxychat.utility.config.Config;
 import com.beanbeanjuice.simpleproxychat.utility.config.ConfigKey;
+import com.beanbeanjuice.simpleproxychat.utility.config.FilterConfig;
 import com.beanbeanjuice.simpleproxychat.utility.config.Permission;
 import com.beanbeanjuice.simpleproxychat.utility.listeners.MessageType;
 import com.beanbeanjuice.simpleproxychat.utility.epoch.EpochHelper;
@@ -23,10 +24,6 @@ import net.luckperms.api.node.NodeType;
 import net.luckperms.api.node.types.PrefixNode;
 import net.luckperms.api.node.types.SuffixNode;
 import net.luckperms.api.query.QueryOptions;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
 
 import java.awt.*;
 import java.util.*;
@@ -46,6 +43,22 @@ public class ChatHandler {
     private final Bot discordBot;
     private final WebhookSender webhookSender;
     private final LastMessagesHelper lastMessagesHelper;
+    private final MessageFormatter messageFormatter;
+    
+    // Cache for compiled regex patterns to avoid recompilation on every message
+    private static class CompiledRegexRule {
+        final Pattern pattern;
+        final String replacementMinecraft;
+        final String replacementDiscord;
+        
+        CompiledRegexRule(Pattern pattern, String replacementMinecraft, String replacementDiscord) {
+            this.pattern = pattern;
+            this.replacementMinecraft = replacementMinecraft;
+            this.replacementDiscord = replacementDiscord;
+        }
+    }
+    
+    private volatile List<CompiledRegexRule> compiledRegexCache = new ArrayList<>();
 
     public ChatHandler(ISimpleProxyChat plugin) {
         this.plugin = plugin;
@@ -53,8 +66,43 @@ public class ChatHandler {
         this.discordBot = plugin.getDiscordBot();
         this.webhookSender = new WebhookSender(plugin, this.config);
         this.lastMessagesHelper = new LastMessagesHelper(plugin.getSPCConfig());
+        this.messageFormatter = new MessageFormatter(this.config);
+        
+        // Pre-compile regex patterns for performance
+        rebuildRegexCache();
 
         plugin.getDiscordBot().addRunnableToQueue(() -> plugin.getDiscordBot().getJDA().ifPresent((jda) -> jda.addEventListener(new DiscordChatHandler(config, this::sendFromDiscord))));
+    }
+    
+    /**
+     * Rebuilds the regex pattern cache from config. Call this after config reload.
+     */
+    public void rebuildRegexCache() {
+        List<FilterConfig.FilterRegexRule> rules = config.getFilterConfig().getRegexRules();
+        List<CompiledRegexRule> newCache = new ArrayList<>();
+        
+        for (FilterConfig.FilterRegexRule r : rules) {
+            if (r == null || r.pattern == null || r.pattern.isEmpty()) continue;
+            
+            int flags = 0;
+            if (r.flags != null) {
+                if (r.flags.contains("i")) flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+                if (r.flags.contains("m")) flags |= Pattern.MULTILINE;
+                if (r.flags.contains("s")) flags |= Pattern.DOTALL;
+            }
+            
+            try {
+                Pattern compiled = Pattern.compile(r.pattern, flags);
+                String replMc = r.replacementMinecraft != null ? r.replacementMinecraft : "";
+                String replDc = r.replacementDiscord != null ? r.replacementDiscord : "";
+                newCache.add(new CompiledRegexRule(compiled, replMc, replDc));
+            } catch (Exception e) {
+                // Log and skip invalid patterns
+                plugin.log("Invalid regex pattern in filter config: " + r.pattern + " - " + e.getMessage());
+            }
+        }
+        
+        this.compiledRegexCache = newCache;
     }
 
     private Optional<String> getValidMessage(String message) {
@@ -148,7 +196,9 @@ public class ChatHandler {
                     }
                     if (config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_USE_TIMESTAMP).asBoolean())
                         embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
-                    discordBot.sendMessageEmbed(embedBuilder.build());
+                    // Route to override channel if configured
+                    String overrideId = resolveOverrideChannelId(MessageType.ADVANCEMENT);
+                    discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
                 }
                 sentToEventsWebhook = true;
             } else if (chatMessageData.getType() == MessageType.DEATH &&
@@ -220,7 +270,9 @@ public class ChatHandler {
                     }
                     if (config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_USE_TIMESTAMP).asBoolean())
                         embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
-                    discordBot.sendMessageEmbed(embedBuilder.build());
+                    // Route to override channel if configured
+                    String overrideId = resolveOverrideChannelId(MessageType.DEATH);
+                    discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
                 }
                 sentToEventsWebhook = true;
             }
@@ -240,31 +292,44 @@ public class ChatHandler {
                             discordMessage
                     );
                 } else if ("embed".equals(mode)) {
-                Color color = config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_COLOR).asColor();
+                    Color color = config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_COLOR).asColor();
 
-                EmbedBuilder embedBuilder = new EmbedBuilder()
-                        .setDescription(discordEmbedMessage)
-                        .setColor(color);
+                    EmbedBuilder embedBuilder = new EmbedBuilder()
+                            .setDescription(discordEmbedMessage)
+                            .setColor(color);
 
-                String _title = Optional.ofNullable(discordEmbedTitle).orElse("").trim();
-                if (!_title.isEmpty()) {
-                    embedBuilder.setAuthor(_title, null, getPlayerHeadURL(chatMessageData.getPlayerUUID()));
-                }
+                    String _title = Optional.ofNullable(discordEmbedTitle).orElse("").trim();
+                    if (!_title.isEmpty()) {
+                        embedBuilder.setAuthor(_title, null, getPlayerHeadURL(chatMessageData.getPlayerUUID()));
+                    }
 
-                if (config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_USE_TIMESTAMP).asBoolean())
-                    embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
+                    if (config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_USE_TIMESTAMP).asBoolean())
+                        embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
 
-                discordBot.sendMessageEmbed(embedBuilder.build());
-            } else {
-                // plain
-                discordBot.sendMessage(discordMessage);
+                    // Route to override channel if configured for chat
+                    String overrideId = resolveOverrideChannelId(MessageType.CHAT);
+                    discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
+                } else {
+                    // plain
+                    String overrideId = resolveOverrideChannelId(MessageType.CHAT);
+                    discordBot.sendMessageToChannelId(overrideId, discordMessage);
                 }
             }
         }
 
         // Log to Minecraft
         if (config.get(ConfigKey.MINECRAFT_CHAT_ENABLED).asBoolean()) {
-            chatMessageData.chatSendToAllOtherPlayers(minecraftMessage);
+            boolean allowProxy = true;
+            MessageType type = chatMessageData.getType();
+            if (type == MessageType.ADVANCEMENT) {
+                allowProxy = config.get(ConfigKey.MINECRAFT_YEP_ADVANCEMENT_PROXY_SEND).asBoolean();
+            } else if (type == MessageType.DEATH) {
+                allowProxy = config.get(ConfigKey.MINECRAFT_YEP_DEATH_PROXY_SEND).asBoolean();
+            }
+
+            if (allowProxy) {
+                chatMessageData.chatSendToAllOtherPlayers(minecraftMessage);
+            }
             lastMessagesHelper.addMessage(minecraftMessage);
         }
 
@@ -293,35 +358,40 @@ public class ChatHandler {
         String discordConfigString = config.get(ConfigKey.MINECRAFT_DISCORD_MESSAGE).asString();
 
         String aliasedServerName = Helper.convertAlias(config, serverName);
+        String timeString = messageFormatter.getTimeString();
 
-        List<Tuple<String, String>> replacementsMinecraft = new ArrayList<>();
-        replacementsMinecraft.add(Tuple.of("message", mcMessagePart));
-        replacementsMinecraft.add(Tuple.of("server", aliasedServerName));
-        replacementsMinecraft.add(Tuple.of("original_server", serverName));
-        replacementsMinecraft.add(Tuple.of("to", aliasedServerName));
-        replacementsMinecraft.add(Tuple.of("original_to", serverName));
-        replacementsMinecraft.add(Tuple.of("player", playerName));
-        replacementsMinecraft.add(Tuple.of("escaped_player", Helper.escapeString(playerName)));
-        replacementsMinecraft.add(Tuple.of("epoch", String.valueOf(EpochHelper.getEpochSecond())));
-        replacementsMinecraft.add(Tuple.of("time", getTimeString()));
-        replacementsMinecraft.add(Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString()));
+        // Build replacements using MessageFormatter
+        String minecraftMessage = messageFormatter.builder()
+                .withMessage(mcMessagePart)
+                .withPlayer(playerName)
+                .withServer(aliasedServerName, serverName)
+                .withTime(timeString)
+                .withPluginPrefix()
+                .apply(minecraftConfigString);
 
-        List<Tuple<String, String>> replacementsDiscord = new ArrayList<>();
-        replacementsDiscord.add(Tuple.of("message", dcMessagePart));
-        replacementsDiscord.add(Tuple.of("server", aliasedServerName));
-        replacementsDiscord.add(Tuple.of("original_server", serverName));
-        replacementsDiscord.add(Tuple.of("to", aliasedServerName));
-        replacementsDiscord.add(Tuple.of("original_to", serverName));
-        replacementsDiscord.add(Tuple.of("player", playerName));
-        replacementsDiscord.add(Tuple.of("escaped_player", Helper.escapeString(playerName)));
-        replacementsDiscord.add(Tuple.of("epoch", String.valueOf(EpochHelper.getEpochSecond())));
-        replacementsDiscord.add(Tuple.of("time", getTimeString()));
-        replacementsDiscord.add(Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString()));
+        String discordMessage = messageFormatter.builder()
+                .withMessage(dcMessagePart)
+                .withPlayer(playerName)
+                .withServer(aliasedServerName, serverName)
+                .withTime(timeString)
+                .withPluginPrefix()
+                .apply(discordConfigString);
 
-        String minecraftMessage = Helper.replaceKeys(minecraftConfigString, replacementsMinecraft);
-        String discordMessage = Helper.replaceKeys(discordConfigString, replacementsDiscord);
-        String discordEmbedTitle = Helper.replaceKeys(config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_TITLE).asString(), replacementsDiscord);
-        String discordEmbedMessage = Helper.replaceKeys(config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_MESSAGE).asString(), replacementsDiscord);
+        String discordEmbedTitle = messageFormatter.builder()
+                .withMessage(dcMessagePart)
+                .withPlayer(playerName)
+                .withServer(aliasedServerName, serverName)
+                .withTime(timeString)
+                .withPluginPrefix()
+                .apply(config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_TITLE).asString());
+
+        String discordEmbedMessage = messageFormatter.builder()
+                .withMessage(dcMessagePart)
+                .withPlayer(playerName)
+                .withServer(aliasedServerName, serverName)
+                .withTime(timeString)
+                .withPluginPrefix()
+                .apply(config.get(ConfigKey.MINECRAFT_DISCORD_EMBED_MESSAGE).asString());
 
         minecraftMessage = replacePrefixSuffix(minecraftMessage, playerUUID, aliasedServerName, serverName);
         discordMessage = replacePrefixSuffix(discordMessage, playerUUID, aliasedServerName, serverName);
@@ -387,21 +457,15 @@ public class ChatHandler {
     }
 
     private String applyRegexRules(String text, boolean forMinecraft) {
-        List<com.beanbeanjuice.simpleproxychat.utility.config.Config.FilterRegexRule> rules = Optional.ofNullable(config.getFilterRegexRules()).orElseGet(Collections::emptyList);
-        if (rules.isEmpty() || text == null || text.isEmpty()) return text;
+        if (text == null || text.isEmpty() || compiledRegexCache.isEmpty()) return text;
+        
         String result = text;
-        for (com.beanbeanjuice.simpleproxychat.utility.config.Config.FilterRegexRule r : rules) {
-            if (r == null || r.pattern == null || r.pattern.isEmpty()) continue;
-            String repl = forMinecraft ? r.replacementMinecraft : r.replacementDiscord;
-            if (repl == null) repl = "";
-            int flags = 0;
-            if (r.flags != null) {
-                if (r.flags.contains("i")) flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
-                if (r.flags.contains("m")) flags |= Pattern.MULTILINE;
-                if (r.flags.contains("s")) flags |= Pattern.DOTALL;
-            }
+        // Use cached compiled patterns for better performance
+        for (CompiledRegexRule rule : compiledRegexCache) {
+            String repl = forMinecraft ? rule.replacementMinecraft : rule.replacementDiscord;
             try {
-                result = Pattern.compile(r.pattern, flags).matcher(result).replaceAll(repl);
+                // Use Matcher.quoteReplacement to properly escape special characters in replacement string
+                result = rule.pattern.matcher(result).replaceAll(Matcher.quoteReplacement(repl));
             } catch (Exception ignored) { }
         }
         return result;
@@ -413,23 +477,17 @@ public class ChatHandler {
         String discordConfigString = config.get(ConfigKey.DISCORD_LEAVE_MESSAGE).asString();
 
         String aliasedServerName = Helper.convertAlias(config, serverName);
+        String timeString = messageFormatter.getTimeString();
 
-        List<Tuple<String, String>> replacements = new ArrayList<>();
-        replacements.add(Tuple.of("player", playerName));
-        replacements.add(Tuple.of("escaped_player", Helper.escapeString(playerName)));
-        replacements.add(Tuple.of("server", aliasedServerName));
-        replacements.add(Tuple.of("original_server", serverName));
-        replacements.add(Tuple.of("to", aliasedServerName));
-        replacements.add(Tuple.of("original_to", serverName));
-        replacements.add(Tuple.of("epoch", String.valueOf(EpochHelper.getEpochSecond())));
-        replacements.add(Tuple.of("time", getTimeString()));
-        replacements.add(Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString()));
+        // Build replacements using MessageFormatter
+        MessageFormatter.ReplacementBuilder builder = messageFormatter.builder()
+                .withPlayer(playerName)
+                .withServer(aliasedServerName, serverName)
+                .withTime(timeString)
+                .withPluginPrefix();
 
-        String message = Helper.replaceKeys(configString, replacements);
-        String discordMessage = Helper.replaceKeys(discordConfigString, replacements);
-
-        message = replacePrefixSuffix(message, playerUUID, aliasedServerName, serverName);
-        discordMessage = replacePrefixSuffix(discordMessage, playerUUID, aliasedServerName, serverName);
+        String message = replacePrefixSuffix(builder.apply(configString), playerUUID, aliasedServerName, serverName);
+        String discordMessage = replacePrefixSuffix(builder.apply(discordConfigString), playerUUID, aliasedServerName, serverName);
 
         // Log to Console
         if (config.get(ConfigKey.CONSOLE_LEAVE).asBoolean()) plugin.log(message);
@@ -437,17 +495,22 @@ public class ChatHandler {
         // Log to Discord
         DISCORD_SENT: if (config.get(ConfigKey.DISCORD_LEAVE_ENABLED).asBoolean()) {
             if (!config.get(ConfigKey.DISCORD_LEAVE_USE_EMBED).asBoolean()) {
-                discordBot.sendMessage(discordMessage);
+                String overrideId = resolveOverrideChannelId(MessageType.LEAVE);
+                discordBot.sendMessageToChannelId(overrideId, discordMessage);
                 break DISCORD_SENT;
             }
 
             EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordMessage).setColor(Color.RED);
             if (config.get(ConfigKey.DISCORD_LEAVE_USE_TIMESTAMP).asBoolean()) embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
-            discordBot.sendMessageEmbed(embedBuilder.build());
+            String overrideId = resolveOverrideChannelId(MessageType.LEAVE);
+            discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
         }
 
         // Log to Minecraft
-        if (config.get(ConfigKey.MINECRAFT_LEAVE_ENABLED).asBoolean()) minecraftLogger.accept(message, Permission.READ_LEAVE_MESSAGE);
+        if (config.get(ConfigKey.MINECRAFT_LEAVE_ENABLED).asBoolean()
+                && config.get(ConfigKey.MINECRAFT_LEAVE_PROXY_SEND).asBoolean()) {
+            minecraftLogger.accept(message, Permission.READ_LEAVE_MESSAGE);
+        }
     }
 
     public void runProxyJoinMessage(String playerName, UUID playerUUID, String serverName,
@@ -456,25 +519,17 @@ public class ChatHandler {
         String discordConfigString = config.get(ConfigKey.DISCORD_JOIN_MESSAGE).asString();
 
         String aliasedServerName = Helper.convertAlias(config, serverName);
+        String timeString = messageFormatter.getTimeString();
 
-        List<Tuple<String, String>> replacements = new ArrayList<>();
-        replacements.add(Tuple.of("player", playerName));
-        replacements.add(Tuple.of("escaped_player", Helper.escapeString(playerName)));
-        replacements.add(Tuple.of("server", Helper.convertAlias(config, serverName)));
-        replacements.add(Tuple.of("to", Helper.convertAlias(config, serverName)));
-        replacements.add(Tuple.of("server", aliasedServerName));
-        replacements.add(Tuple.of("original_server", serverName));
-        replacements.add(Tuple.of("to", aliasedServerName));
-        replacements.add(Tuple.of("original_to", serverName));
-        replacements.add(Tuple.of("epoch", String.valueOf(EpochHelper.getEpochSecond())));
-        replacements.add(Tuple.of("time", getTimeString()));
-        replacements.add(Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString()));
+        // Build replacements using MessageFormatter
+        MessageFormatter.ReplacementBuilder builder = messageFormatter.builder()
+                .withPlayer(playerName)
+                .withServer(aliasedServerName, serverName)
+                .withTime(timeString)
+                .withPluginPrefix();
 
-        String message = Helper.replaceKeys(configString, replacements);
-        String discordMessage = Helper.replaceKeys(discordConfigString, replacements);
-
-        message = replacePrefixSuffix(message, playerUUID, aliasedServerName, serverName);
-        discordMessage = replacePrefixSuffix(discordMessage, playerUUID, aliasedServerName, serverName);
+        String message = replacePrefixSuffix(builder.apply(configString), playerUUID, aliasedServerName, serverName);
+        String discordMessage = replacePrefixSuffix(builder.apply(discordConfigString), playerUUID, aliasedServerName, serverName);
 
         // Log to Console
         if (config.get(ConfigKey.CONSOLE_JOIN).asBoolean()) plugin.log(message);
@@ -482,18 +537,22 @@ public class ChatHandler {
         // Log to Discord
         DISCORD_SENT: if (config.get(ConfigKey.DISCORD_JOIN_ENABLED).asBoolean()) {
             if (!config.get(ConfigKey.DISCORD_JOIN_USE_EMBED).asBoolean()) {
-                discordBot.sendMessage(discordMessage);
+                String overrideId = resolveOverrideChannelId(MessageType.JOIN);
+                discordBot.sendMessageToChannelId(overrideId, discordMessage);
                 break DISCORD_SENT;
             }
 
             EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordMessage).setColor(Color.GREEN);
             if (config.get(ConfigKey.DISCORD_JOIN_USE_TIMESTAMP).asBoolean()) embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
-            discordBot.sendMessageEmbed(embedBuilder.build());
+            String overrideId = resolveOverrideChannelId(MessageType.JOIN);
+            discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
         }
 
         // Log to Minecraft
-        if (config.get(ConfigKey.MINECRAFT_JOIN_ENABLED).asBoolean())
+        if (config.get(ConfigKey.MINECRAFT_JOIN_ENABLED).asBoolean()
+                && config.get(ConfigKey.MINECRAFT_JOIN_PROXY_SEND).asBoolean()) {
             minecraftLogger.accept(message, Permission.READ_JOIN_MESSAGE);
+        }
     }
 
     public void runProxySwitchMessage(String from, String to, String playerName, UUID playerUUID,
@@ -504,27 +563,19 @@ public class ChatHandler {
 
         String aliasedFrom = Helper.convertAlias(config, from);
         String aliasedTo = Helper.convertAlias(config, to);
+        String timeString = messageFormatter.getTimeString();
 
-        List<Tuple<String, String>> replacements = new ArrayList<>();
-        replacements.add(Tuple.of("from", aliasedFrom));
-        replacements.add(Tuple.of("original_from", from));
-        replacements.add(Tuple.of("to", aliasedTo));
-        replacements.add(Tuple.of("original_to", to));
-        replacements.add(Tuple.of("server", aliasedTo));
-        replacements.add(Tuple.of("original_server", to));
-        replacements.add(Tuple.of("player", playerName));
-        replacements.add(Tuple.of("escaped_player", Helper.escapeString(playerName)));
-        replacements.add(Tuple.of("epoch", String.valueOf(EpochHelper.getEpochSecond())));
-        replacements.add(Tuple.of("time", getTimeString()));
-        replacements.add(Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString()));
+        // Build replacements using MessageFormatter
+        MessageFormatter.ReplacementBuilder builder = messageFormatter.builder()
+                .withFromServer(aliasedFrom, from)
+                .withServer(aliasedTo, to)
+                .withPlayer(playerName)
+                .withTime(timeString)
+                .withPluginPrefix();
 
-        String consoleMessage = Helper.replaceKeys(consoleConfigString, replacements);
-        String discordMessage = Helper.replaceKeys(discordConfigString, replacements);
-        String minecraftMessage = Helper.replaceKeys(minecraftConfigString, replacements);
-
-        consoleMessage = replacePrefixSuffix(consoleMessage, playerUUID, aliasedTo, to);
-        minecraftMessage = replacePrefixSuffix(minecraftMessage, playerUUID, aliasedTo, to);
-        discordMessage = replacePrefixSuffix(discordMessage, playerUUID, aliasedTo, to);
+        String consoleMessage = replacePrefixSuffix(builder.apply(consoleConfigString), playerUUID, aliasedTo, to);
+        String discordMessage = replacePrefixSuffix(builder.apply(discordConfigString), playerUUID, aliasedTo, to);
+        String minecraftMessage = replacePrefixSuffix(builder.apply(minecraftConfigString), playerUUID, aliasedTo, to);
 
         // Log to Console
         if (config.get(ConfigKey.CONSOLE_SWITCH).asBoolean()) plugin.log(consoleMessage);
@@ -532,18 +583,22 @@ public class ChatHandler {
         // Log to Discord
         DISCORD_SENT: if (config.get(ConfigKey.DISCORD_SWITCH_ENABLED).asBoolean()) {
             if (!config.get(ConfigKey.DISCORD_SWITCH_USE_EMBED).asBoolean()) {
-                discordBot.sendMessage(discordMessage);
+                String overrideId = resolveOverrideChannelId(MessageType.SWITCH);
+                discordBot.sendMessageToChannelId(overrideId, discordMessage);
                 break DISCORD_SENT;
             }
 
             EmbedBuilder embedBuilder = simpleAuthorEmbedBuilder(playerUUID, discordMessage).setColor(Color.YELLOW);
             if (config.get(ConfigKey.DISCORD_SWITCH_USE_TIMESTAMP).asBoolean()) embedBuilder.setTimestamp(EpochHelper.getEpochInstant());
-            discordBot.sendMessageEmbed(embedBuilder.build());
+            String overrideId = resolveOverrideChannelId(MessageType.SWITCH);
+            discordBot.sendMessageEmbedToChannelId(overrideId, embedBuilder.build());
         }
 
         // Log to Minecraft
         if (config.get(ConfigKey.MINECRAFT_SWITCH_ENABLED).asBoolean()) {
-            minecraftLogger.accept(minecraftMessage);
+            if (config.get(ConfigKey.MINECRAFT_SWITCH_PROXY_SEND).asBoolean()) {
+                minecraftLogger.accept(minecraftMessage);
+            }
             lastMessagesHelper.getBoundedArrayList().forEach(playerLogger);
         }
     }
@@ -562,6 +617,31 @@ public class ChatHandler {
 
     private String getPlayerHeadURL(UUID playerUUID) {
         return MINECRAFT_PLAYER_HEAD_URL.replace("{PLAYER_UUID}", playerUUID.toString());
+    }
+
+    // Resolve per-message-type override channel ID from config, or null if not set
+    private String resolveOverrideChannelId(MessageType type) {
+        try {
+            Map<String, String> map = config.get(ConfigKey.DISCORD_CHANNEL_OVERRIDE).asStringMap();
+            if (map == null || map.isEmpty()) return null;
+            String key;
+            switch (type) {
+                case CHAT -> key = "chat";
+                case JOIN -> key = "join";
+                case LEAVE -> key = "leave";
+                case SWITCH -> key = "switch";
+                case ADVANCEMENT -> key = "advancement";
+                case DEATH -> key = "death";
+                default -> key = null;
+            }
+            if (key == null) return null;
+            String id = map.getOrDefault(key, null);
+            if (id == null) return null;
+            id = id.trim();
+            return id.isEmpty() ? null : id;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     public void sendFromDiscord(MessageReceivedEvent event) {
@@ -633,7 +713,7 @@ public class ChatHandler {
                 Tuple.of("message", discordToMc),
                 Tuple.of("discord-tag", discordTag),
                 Tuple.of("epoch", String.valueOf(EpochHelper.getEpochSecond())),
-                Tuple.of("time", getTimeString()),
+                Tuple.of("time", messageFormatter.getTimeString()),
                 Tuple.of("plugin-prefix", config.get(ConfigKey.PLUGIN_PREFIX).asString())
         );
 
@@ -713,19 +793,6 @@ public class ChatHandler {
 
             return message.replace("%prefix%", prefix).replace("%suffix%", suffix);
         }).orElse(message);
-    }
-
-    /**
-     * @see <a href="https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html">Format</a>
-     */
-    private String getTimeString() {
-        DateTimeZone zone = config.get(ConfigKey.TIMESTAMP_TIMEZONE).asDateTimeZone();
-        DateTimeFormatter format = DateTimeFormat.forPattern(config.get(ConfigKey.TIMESTAMP_FORMAT).asString());
-
-        long timeInMillis = EpochHelper.getEpochMillisecond();
-        DateTime time = new DateTime(timeInMillis).withZone(zone);
-
-        return time.toString(format);
     }
 
 }

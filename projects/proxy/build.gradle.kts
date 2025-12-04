@@ -57,10 +57,6 @@ dependencies {
     // bStats
     implementation("org.bstats", "bstats-velocity", "3.1.0")
 
-    // Database (PostgreSQL) for account linking
-    implementation("com.zaxxer", "HikariCP", "5.1.0")
-    implementation("org.postgresql", "postgresql", "42.7.3")
-
     // LuckPerms Support
     compileOnly("net.luckperms", "api", "5.4")
 
@@ -114,12 +110,6 @@ tasks.withType<ShadowJar> {
     relocate("org.bstats", "com.beanbeanjuice.simpleproxychat.libs.org.bstats")
     relocate("joda-time", "com.beanbeanjuice.simpleproxychat.libs.joda-time")  // check
     relocate("org.apache.maven", "com.beanbeanjuice.simpleproxychat.libs.org.apache.maven")  // check
-    relocate("com.zaxxer.hikari", "com.beanbeanjuice.simpleproxychat.libs.com.zaxxer.hikari")
-    // Do NOT relocate PostgreSQL driver to keep driver class discoverable
     // merge SPI service files for libraries that rely on them
     mergeServiceFiles()
-    // Keep PostgreSQL driver classes even though they are loaded reflectively
-    minimize {
-        exclude(dependency("org.postgresql:postgresql"))
-    }
 }

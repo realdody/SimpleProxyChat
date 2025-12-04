@@ -12,12 +12,14 @@ plugin-prefix: "&8[<bold><rainbow>SimpleProxyChat&r&8]"
 minecraft:
   join:
     enabled: true
+    proxy-send: true
     message: "&e%player% &ahas joined the network. (%server%)"
     recipients:
       exclude-self: false
       exclude-server: false # excludes every player but the sender
   leave:
     enabled: true
+    proxy-send: true
     message: "&e%player% &chas left the network. (%server%)"
     recipients:
       exclude-self: false
@@ -28,13 +30,16 @@ minecraft:
     vanished: "&cYou cannot send proxy messages while vanished. Your message must end with a '&e/&c' to speak."
   death:
     # YepLib: Minecraft death message template
+    proxy-send: true
     message: "<gray>[<red>Death</red>]</gray> <yellow>%player%</yellow> <gray>»</gray> %death_message%"
   advancement:
     # YepLib: Minecraft advancement message template
     # Placeholders: %player%, %title%, %description%, %advancement_type%, %server%
+    proxy-send: true
     message: "<gray>[<green>Advancement</green>%advancement_type%]</gray> <yellow>%player%</yellow> <gray>»</gray> %title% - %description%"
   switch:
     enabled: true
+    proxy-send: true
     default: "&e%player% &7moved from &c%from% &7to &a%to%&7."
     no-from: "&e%player% &7moved &7to &a%to%&7."
   whisper:
@@ -83,14 +88,6 @@ minecraft:
     broadcast:
       usage: "%plugin-prefix% &c/spc-broadcast (message)"
       message: "%plugin-prefix% &8[&a&lBROADCAST&r&8] &6%message%"
-    link:
-      already-linked: "%plugin-prefix% &cYour Minecraft account is already linked."
-      code: "%plugin-prefix% &7Your link code is &a%code%&7. In Discord, run &a/link %code% &7within &e%minutes% &7minutes."
-      error: "%plugin-prefix% &cThere was an error generating your link code. Please contact an administrator."
-    unlink:
-      success: "%plugin-prefix% &aYour Discord account has been unlinked from your Minecraft account."
-      not-linked: "%plugin-prefix% &eYour Minecraft account is not currently linked."
-      error: "%plugin-prefix% &cThere was an error unlinking your account. Please contact an administrator."
 
 # Discord Stuff
 discord:
@@ -142,7 +139,7 @@ discord:
   advancement:
     # YepLib: Discord advancement message templates
     # Placeholders: %player%, %title%, %description%, %advancement_type%, %server%
-    message: "[Advancement%advancement_type%] %player% » %title% - %description%"
+    message: "[Advancement] %player% » %title% - %description%"
     webhook:
       # When true, send advancement messages via the events webhook (webhook.events-url)
       send: true
@@ -179,25 +176,6 @@ discord:
       player-format: "- %username%"
       no-players-format: "No players online"
       server-offline-format: "Server offline"
-    link:
-      enabled: true
-      allowed-roles: []
-      ephemeral: true
-      usage: "Use /link <code> to link your Discord to your Minecraft account."
-      success: "✅ Your Discord account has been linked successfully."
-      invalid: "❌ That code is invalid. Please generate a new one in-game with /link."
-      expired: "⌛ That code has expired. Please generate a new one in-game with /link."
-      already-used: "⚠️ That code was already used. Please generate a new one in-game with /link."
-      already-linked: "ℹ️ Your Discord account is already linked."
-      db-error: "⚠️ An internal error occurred while linking. Please try again later."
-    check-link:
-      enabled: true
-      allowed-roles: []
-      ephemeral: true
-      usage: "Use /check-link to see if your Discord is linked to a Minecraft account."
-      linked: "✅ Your Discord is linked to a Minecraft account."
-      not-linked: "ℹ️ Your Discord is not linked to a Minecraft account."
-      db-error: "⚠️ An internal error occurred while checking your link status. Please try again later."
   topic:
     online: "There are %online% players online."
     offline: "The proxy is offline."
@@ -226,4 +204,5 @@ console:
 update-message: "&7There is an update! You are on &c%old%. New version is &a%new%&7: &6%link%"
 
 # DO NOT TOUCH THIS
-file-version: 18
+file-version: 19
+

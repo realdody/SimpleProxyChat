@@ -1,6 +1,5 @@
 package com.beanbeanjuice.simpleproxychat.utility.config;
 
-import com.beanbeanjuice.simpleproxychat.utility.Tuple;
 import com.beanbeanjuice.simpleproxychat.utility.helper.Helper;
 import com.beanbeanjuice.simpleproxychat.utility.helper.ServerChatLockHelper;
 import dev.dejvokep.boostedyaml.YamlDocument;
@@ -11,238 +10,152 @@ import dev.dejvokep.boostedyaml.settings.general.GeneralSettings;
 import dev.dejvokep.boostedyaml.settings.loader.LoaderSettings;
 import dev.dejvokep.boostedyaml.settings.updater.UpdaterSettings;
 import lombok.Getter;
-import org.joda.time.DateTimeZone;
 
-import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-import java.util.List;
+import java.util.logging.Logger;
 
+/**
+ * Main configuration manager for SimpleProxyChat.
+ * Handles loading and reloading of config.yml, messages.yml, and filter.yml.
+ */
 public class Config {
+    
+    private static final Logger LOGGER = Logger.getLogger(Config.class.getName());
 
     private YamlDocument yamlConfig;
     private YamlDocument yamlMessages;
     private YamlDocument yamlFilter;
     private final File configFolder;
-    private final HashMap<ConfigKey, ConfigValueWrapper> config;
-    // Filter configuration (filter.yml)
-    @Getter private boolean filterEnabled = false;
-    @Getter private boolean filterCaseInsensitive = true;
-    @Getter private boolean filterWholeWord = true;
-    @Getter private String filterDefaultReplacement = "[Redacted]";
-    @Getter private Map<String, String> filterReplacements = new HashMap<>();
-    @Getter private List<String> filterGlobalWords = new ArrayList<>();
-    @Getter private boolean filterRegexOverrideLinkifier = false;
-    @Getter private List<FilterRegexRule> filterRegexRules = new ArrayList<>();
+    private final Map<ConfigKey, ConfigValue<?>> configCache;
+    private final List<Runnable> reloadListeners;
 
-    // Regex rule DTO
-    public static class FilterRegexRule {
-        public final String id;
-        public final String pattern;
-        public final String replacementMinecraft;
-        public final String replacementDiscord;
-        public final String flags; // e.g., "i", "m", "s"
-
-        public FilterRegexRule(String id, String pattern, String replacementMinecraft, String replacementDiscord, String flags) {
-            this.id = id;
-            this.pattern = pattern;
-            this.replacementMinecraft = replacementMinecraft;
-            this.replacementDiscord = replacementDiscord;
-            this.flags = flags;
-        }
-    }
-    private final ArrayList<Runnable> reloadFunctions;
-
+    @Getter private final FilterConfig filterConfig;
     @Getter private final ServerChatLockHelper serverChatLockHelper;
 
     public Config(File configFolder) {
         this.configFolder = configFolder;
-        config = new HashMap<>();
-        reloadFunctions = new ArrayList<>();
-        serverChatLockHelper = new ServerChatLockHelper();
+        this.configCache = new HashMap<>();
+        this.reloadListeners = new ArrayList<>();
+        this.filterConfig = new FilterConfig();
+        this.serverChatLockHelper = new ServerChatLockHelper();
     }
 
+    /**
+     * Initializes the configuration by loading all config files.
+     */
     public void initialize() {
         try {
-            yamlConfig = loadConfig("config.yml");
-            yamlMessages = loadConfig("messages.yml");
-            yamlFilter = loadConfig("filter.yml");
-            yamlConfig.update();
-            yamlMessages.update();
-            yamlFilter.update();
-            yamlConfig.save();
-            yamlMessages.save();
-            yamlFilter.save();
-            readConfig();
-            readFilter();
-        } catch (IOException ignored) { }
+            yamlConfig = loadConfigFile("config.yml");
+            yamlMessages = loadConfigFile("messages.yml");
+            yamlFilter = loadConfigFile("filter.yml");
+            
+            // Update and save files to ensure they're up-to-date
+            updateAndSave(yamlConfig);
+            updateAndSave(yamlMessages);
+            updateAndSave(yamlFilter);
+            
+            // Load configuration values
+            loadAllConfigs();
+            
+            LOGGER.info("Configuration loaded successfully");
+        } catch (IOException e) {
+            LOGGER.severe("Failed to initialize configuration: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
-    public void addReloadListener(Runnable runnable) {
-        reloadFunctions.add(runnable);
+    /**
+     * Adds a listener to be notified when configuration is reloaded.
+     * @param listener The listener to add
+     */
+    public void addReloadListener(Runnable listener) {
+        reloadListeners.add(listener);
     }
 
+    /**
+     * Reloads all configuration from disk and notifies listeners.
+     */
     public void reload() {
         try {
             yamlConfig.reload();
             yamlMessages.reload();
             yamlFilter.reload();
-            readConfig();
-            readFilter();
-            reloadFunctions.forEach(Runnable::run);
-        } catch (IOException ignored) { }
+            
+            loadAllConfigs();
+            
+            reloadListeners.forEach(Runnable::run);
+            
+            LOGGER.info("Configuration reloaded successfully");
+        } catch (IOException e) {
+            LOGGER.severe("Failed to reload configuration: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
+    /**
+     * Gets a configuration value by key.
+     * @param key The configuration key
+     * @return The configuration value wrapper (never null, but may contain null value)
+     */
     public ConfigValueWrapper get(ConfigKey key) {
-        return config.get(key);
+        ConfigValue<?> value = configCache.get(key);
+        if (value == null) {
+            LOGGER.warning("Requested config key not found: " + key);
+            return new ConfigValueWrapper(null);
+        }
+        // Convert to old wrapper for backward compatibility
+        return new ConfigValueWrapper(value.get());
     }
 
-    private void readConfig() throws IOException {
-        Arrays.stream(ConfigKey.values()).forEach((key) -> {
+    /**
+     * Loads all configuration values from YAML documents into cache.
+     */
+    private void loadAllConfigs() {
+        loadMainConfigs();
+        filterConfig.load(yamlFilter);
+    }
+    
+    /**
+     * Loads config.yml and messages.yml values using the ConfigLoader utility.
+     */
+    private void loadMainConfigs() {
+        Arrays.stream(ConfigKey.values()).forEach(key -> {
             YamlDocument document = (key.getFile() == ConfigFileType.CONFIG) ? yamlConfig : yamlMessages;
-            String route = key.getKey();
-
-            if (key.getClassType() == String.class) {
-                String message = Helper.translateLegacyCodes(document.getString(route));
-                this.config.put(key, new ConfigValueWrapper(message));
-                return;
-            }
-
-            if (key.getClassType() == Integer.class) {
-                this.config.put(key, new ConfigValueWrapper(document.getInt(route)));
-                return;
-            }
-
-            if (key.getClassType() == Boolean.class) {
-                this.config.put(key, new ConfigValueWrapper(document.getBoolean(route)));
-                return;
-            }
-
-            if (key.getClassType() == Map.class) {
-                Map<String, String> map = new HashMap<>();
-                Section mapSection = document.getSection(route);
-                if (mapSection != null) {
-                    for (Object raw : mapSection.getKeys()) {
-                        String mapKey = String.valueOf(raw);
-                        String value = mapSection.getString(mapKey);
-                        if (value == null) {
-                            // Special handling for aliases: allow nested mapping like "server: Alias: AvatarURL"
-                            if ("aliases".equals(route)) {
-                                Section nested = mapSection.getSection(mapKey);
-                                if (nested != null) {
-                                    // Use the first child key as the alias string
-                                    String aliasKey = null;
-                                    for (Object child : nested.getKeys()) { aliasKey = String.valueOf(child); break; }
-                                    if (aliasKey != null) value = aliasKey;
-                                }
-                            }
-                        }
-                        if (value != null) {
-                            map.put(mapKey, Helper.translateLegacyCodes(value));
-                        }
-                    }
-                }
-                this.config.put(key, new ConfigValueWrapper(map));
-                return;
-            }
-
-            if (key.getClassType() == List.class) {
-                List<String> list = document.getStringList(route);
-                this.config.put(key, new ConfigValueWrapper(list.stream().map(Helper::translateLegacyCodes).toList()));
-                return;
-            }
-
-            if (key.getClassType() == Color.class) {
-                String colorString = document.getString(route);
-                Color color;
-
-                try {
-                    color = Color.decode(colorString);
-                } catch (NumberFormatException e) {
-                    System.err.printf(
-                            "%s is not a valid color. Defaulting to black.\n",
-                            colorString
-                    );
-                    color = Color.black;
-                }
-
-                this.config.put(key, new ConfigValueWrapper(color));
-                return;
-            }
-
-            if (key.getClassType() == DateTimeZone.class) {
-                String timezoneString = document.getString(route);
-                DateTimeZone timezone;
-
-                try {
-                    timezone = DateTimeZone.forID(timezoneString);
-                } catch (IllegalArgumentException e) {
-                    System.err.printf(
-                            "%s is not a valid timezone. Using default timezone. %s\n",
-                            timezoneString, "https://www.joda.org/joda-time/timezones.html"
-                    );
-                    timezone = DateTimeZone.forID("America/Los_Angeles");
-                }
-
-                this.config.put(key, new ConfigValueWrapper(timezone));
-                return;
-            }
-
+            String path = key.getKey();
+            Class<?> type = key.getClassType();
+            
+            ConfigValue<?> value = ConfigLoader.loadValue(document, path, type);
+            configCache.put(key, value);
         });
-
     }
 
-    private void readFilter() {
-        if (yamlFilter == null) return;
-
-        // Basic toggles
-        this.filterEnabled = yamlFilter.getBoolean("filter.enabled", false);
-        this.filterCaseInsensitive = yamlFilter.getBoolean("filter.case-insensitive", true);
-        this.filterWholeWord = yamlFilter.getBoolean("filter.whole-word", true);
-        this.filterDefaultReplacement = Helper.translateLegacyCodes(yamlFilter.getString("filter.default", "[Redacted]"));
-
-        // Replacements map
-        Map<String, String> map = new HashMap<>();
-        Section repl = yamlFilter.getSection("filter.replacements");
-        if (repl != null) {
-            repl.getKeys().forEach(k -> {
-                String key = String.valueOf(k);
-                String val = repl.getString(key);
-                map.put(key, Helper.translateLegacyCodes(val != null ? val : ""));
-            });
-        }
-        this.filterReplacements = map;
-
-        // Global words list
-        List<String> globals = yamlFilter.getStringList("filter.global-words");
-        if (globals == null) globals = new ArrayList<>();
-        this.filterGlobalWords = globals.stream().map(Helper::translateLegacyCodes).toList();
-
-        // Regex rules
-        this.filterRegexOverrideLinkifier = yamlFilter.getBoolean("filter.regex.override-linkifier", false);
-        List<FilterRegexRule> rules = new ArrayList<>();
-        Section rulesSec = yamlFilter.getSection("filter.regex.rules");
-        if (rulesSec != null) {
-            for (Object key : rulesSec.getKeys()) {
-                String id = String.valueOf(key);
-                Section rs = rulesSec.getSection(id);
-                if (rs == null) continue;
-                String pattern = rs.getString("pattern");
-                String replMc = rs.getString("replacement-minecraft");
-                String replDc = rs.getString("replacement-discord");
-                String flags = rs.getString("flags");
-                rules.add(new FilterRegexRule(id, pattern, replMc, replDc, flags));
-            }
-        }
-        this.filterRegexRules = rules;
-    }
-
+    /**
+     * Overwrites a configuration value in the cache (runtime only, not persisted).
+     * @param key The configuration key
+     * @param value The new value
+     */
+    @SuppressWarnings("unchecked")
     public void overwrite(ConfigKey key, Object value) {
-        config.put(key, new ConfigValueWrapper(value));
+        configCache.put(key, new ConfigValue(value, key.getClassType()));
+    }
+    
+    /**
+     * Updates and saves a YAML document.
+     */
+    private void updateAndSave(YamlDocument document) throws IOException {
+        document.update();
+        document.save();
     }
 
-    private YamlDocument loadConfig(String fileName) throws IOException {
+    /**
+     * Loads a configuration file from the config folder with versioning and auto-update.
+     * @param fileName The name of the config file
+     * @return The loaded YAML document
+     * @throws IOException If file loading fails
+     */
+    private YamlDocument loadConfigFile(String fileName) throws IOException {
         return YamlDocument.create(
                 new File(configFolder, fileName),
                 Objects.requireNonNull(getClass().getResourceAsStream("/" + fileName)),
@@ -274,43 +187,66 @@ public class Config {
         );
     }
 
-    // Returns alias to use for events webhook from the simple 'aliases' mapping (server -> alias).
-    // Retains legacy nested fallback for backward compatibility.
+    /**
+     * Returns the alias for a server name for events webhook.
+     * Uses the simple 'aliases' mapping (server -> alias) with legacy nested fallback.
+     * @param serverName The server name to look up
+     * @return The alias, or null if not found
+     */
     public String getEventWebhookAliasOverride(String serverName) {
-        if (yamlConfig == null || serverName == null || serverName.isBlank()) return null;
+        if (yamlConfig == null || serverName == null || serverName.isBlank()) {
+            return null;
+        }
+        
         Section aliases = yamlConfig.getSection("aliases");
-        if (aliases == null) return null;
+        if (aliases == null) {
+            return null;
+        }
 
+        // Try simple mapping first
         String simple = aliases.getString(serverName);
-        if (simple != null && !simple.isBlank()) return Helper.translateLegacyCodes(simple);
+        if (simple != null && !simple.isBlank()) {
+            return Helper.translateLegacyCodes(simple);
+        }
 
-        // Legacy fallback: nested mapping under aliases (server -> { Alias: AvatarURL })
+        // Legacy fallback: nested mapping (server -> { Alias: AvatarURL })
         Section nested = aliases.getSection(serverName);
         if (nested != null) {
             for (Object child : nested.getKeys()) {
                 String aliasKey = String.valueOf(child);
-                if (aliasKey != null && !aliasKey.isBlank()) return Helper.translateLegacyCodes(aliasKey);
+                if (aliasKey != null && !aliasKey.isBlank()) {
+                    return Helper.translateLegacyCodes(aliasKey);
+                }
             }
         }
+        
         return null;
     }
 
-    // Returns avatar URL override for events webhook from the new 'alias-avatars' map (alias -> avatarUrl).
-    // Falls back to legacy nested mapping under 'aliases' if present.
+    /**
+     * Returns the avatar URL override for events webhook.
+     * Looks up in 'alias-avatars' map (alias -> avatarUrl) with legacy nested fallback.
+     * @param serverName The server name to look up
+     * @return The avatar URL, or null if not found
+     */
     public String getEventWebhookAvatarOverride(String serverName) {
-        if (yamlConfig == null || serverName == null || serverName.isBlank()) return null;
+        if (yamlConfig == null || serverName == null || serverName.isBlank()) {
+            return null;
+        }
 
-        // First, resolve the alias from the simple aliases map (or legacy nested)
+        // Resolve alias first
         String alias = getEventWebhookAliasOverride(serverName);
 
         // Preferred: look up by alias in alias-avatars
         Section avatars = yamlConfig.getSection("alias-avatars");
         if (avatars != null && alias != null && !alias.isBlank()) {
             String url = avatars.getString(alias);
-            if (url != null && !url.isBlank()) return url;
+            if (url != null && !url.isBlank()) {
+                return url;
+            }
         }
 
-        // Legacy fallback: nested mapping under aliases (server -> { Alias: AvatarURL })
+        // Legacy fallback: nested mapping under aliases
         Section aliases = yamlConfig.getSection("aliases");
         if (aliases != null) {
             Section nested = aliases.getSection(serverName);
@@ -318,12 +254,44 @@ public class Config {
                 for (Object child : nested.getKeys()) {
                     String aliasKey = String.valueOf(child);
                     String url = nested.getString(aliasKey);
-                    if (url != null && !url.isBlank()) return url;
+                    if (url != null && !url.isBlank()) {
+                        return url;
+                    }
                     break;
                 }
             }
         }
+        
         return null;
     }
-
+    
+    // Deprecated methods for backward compatibility with filter access
+    
+    /** @deprecated Use {@link #getFilterConfig()} instead */
+    @Deprecated
+    public boolean isFilterEnabled() { return filterConfig.isEnabled(); }
+    
+    /** @deprecated Use {@link #getFilterConfig()} instead */
+    @Deprecated
+    public boolean isFilterCaseInsensitive() { return filterConfig.isCaseInsensitive(); }
+    
+    /** @deprecated Use {@link #getFilterConfig()} instead */
+    @Deprecated
+    public boolean isFilterWholeWord() { return filterConfig.isWholeWord(); }
+    
+    /** @deprecated Use {@link #getFilterConfig()} instead */
+    @Deprecated
+    public String getFilterDefaultReplacement() { return filterConfig.getDefaultReplacement(); }
+    
+    /** @deprecated Use {@link #getFilterConfig()} instead */
+    @Deprecated
+    public Map<String, String> getFilterReplacements() { return filterConfig.getReplacements(); }
+    
+    /** @deprecated Use {@link #getFilterConfig()} instead */
+    @Deprecated
+    public List<String> getFilterGlobalWords() { return filterConfig.getGlobalWords(); }
+    
+    /** @deprecated Use {@link #getFilterConfig()} instead */
+    @Deprecated
+    public List<FilterConfig.FilterRegexRule> getFilterRegexRules() { return filterConfig.getRegexRules(); }
 }

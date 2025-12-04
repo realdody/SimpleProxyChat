@@ -15,6 +15,8 @@ public enum ConfigKey {
     USE_DISCORD (ConfigFileType.CONFIG, "use-discord", Boolean.class),
     BOT_TOKEN (ConfigFileType.CONFIG, "BOT-TOKEN", String.class),
     CHANNEL_ID (ConfigFileType.CONFIG, "CHANNEL-ID", String.class),
+    // Optional: per-message-type Discord channel overrides
+    DISCORD_CHANNEL_OVERRIDE (ConfigFileType.CONFIG, "discord-channel-override", Map.class),
     // Optional: used to make the [Discord] tag clickable in Minecraft
     DISCORD_INVITE_URL (ConfigFileType.CONFIG, "discord-invite-url", String.class),
     // Discord webhook configuration (URL only; formatting lives in messages.yml)
@@ -49,25 +51,6 @@ public enum ConfigKey {
     BROADCAST_ALIASES (ConfigFileType.CONFIG, "commands.broadcast-aliases", List.class),
     DISABLED_SERVERS (ConfigFileType.CONFIG, "disabled-servers", List.class),
 
-    // Database (PostgreSQL) for account linking
-    DATABASE_POSTGRES_ENABLED (ConfigFileType.CONFIG, "database.postgres.enabled", Boolean.class),
-    DATABASE_POSTGRES_HOST (ConfigFileType.CONFIG, "database.postgres.host", String.class),
-    DATABASE_POSTGRES_PORT (ConfigFileType.CONFIG, "database.postgres.port", Integer.class),
-    DATABASE_POSTGRES_DATABASE (ConfigFileType.CONFIG, "database.postgres.database", String.class),
-    DATABASE_POSTGRES_USERNAME (ConfigFileType.CONFIG, "database.postgres.username", String.class),
-    DATABASE_POSTGRES_PASSWORD (ConfigFileType.CONFIG, "database.postgres.password", String.class),
-    DATABASE_POSTGRES_SSL (ConfigFileType.CONFIG, "database.postgres.ssl", Boolean.class),
-    DATABASE_POSTGRES_POOL_MAXIMUM_POOL_SIZE (ConfigFileType.CONFIG, "database.postgres.pool.maximum-pool-size", Integer.class),
-    DATABASE_POSTGRES_POOL_MINIMUM_IDLE (ConfigFileType.CONFIG, "database.postgres.pool.minimum-idle", Integer.class),
-    DATABASE_POSTGRES_POOL_CONNECTION_TIMEOUT_MS (ConfigFileType.CONFIG, "database.postgres.pool.connection-timeout-ms", Integer.class),
-    DATABASE_POSTGRES_POOL_IDLE_TIMEOUT_MS (ConfigFileType.CONFIG, "database.postgres.pool.idle-timeout-ms", Integer.class),
-    DATABASE_POSTGRES_POOL_MAX_LIFETIME_MS (ConfigFileType.CONFIG, "database.postgres.pool.max-lifetime-ms", Integer.class),
-
-    // Linking system options
-    LINKING_ENABLED (ConfigFileType.CONFIG, "linking.enabled", Boolean.class),
-    LINKING_CODE_LENGTH (ConfigFileType.CONFIG, "linking.code-length", Integer.class),
-    LINKING_EXPIRATION_MINUTES (ConfigFileType.CONFIG, "linking.expiration-minutes", Integer.class),
-
     // MESSAGES
     PLUGIN_PREFIX (ConfigFileType.MESSAGES, "plugin-prefix", String.class),
 
@@ -75,16 +58,19 @@ public enum ConfigKey {
     MINECRAFT_JOIN (ConfigFileType.MESSAGES, "minecraft.join.message", String.class),
     MINECRAFT_JOIN_RECIPIENTS_EXCLUDE_SELF (ConfigFileType.MESSAGES, "minecraft.join.recipients.exclude-self", Boolean.class),
     MINECRAFT_JOIN_RECIPIENTS_EXCLUDE_SERVER (ConfigFileType.MESSAGES, "minecraft.join.recipients.exclude-server", Boolean.class),
+    MINECRAFT_JOIN_PROXY_SEND (ConfigFileType.MESSAGES, "minecraft.join.proxy-send", Boolean.class),
     MINECRAFT_LEAVE_ENABLED (ConfigFileType.MESSAGES, "minecraft.leave.enabled", Boolean.class),
     MINECRAFT_LEAVE (ConfigFileType.MESSAGES, "minecraft.leave.message", String.class),
     MINECRAFT_LEAVE_RECIPIENTS_EXCLUDE_SELF (ConfigFileType.MESSAGES, "minecraft.leave.recipients.exclude-self", Boolean.class),
     MINECRAFT_LEAVE_RECIPIENTS_EXCLUDE_SERVER (ConfigFileType.MESSAGES, "minecraft.leave.recipients.exclude-server", Boolean.class),
+    MINECRAFT_LEAVE_PROXY_SEND (ConfigFileType.MESSAGES, "minecraft.leave.proxy-send", Boolean.class),
     MINECRAFT_CHAT_ENABLED (ConfigFileType.MESSAGES, "minecraft.chat.enabled", Boolean.class),
     MINECRAFT_CHAT_MESSAGE (ConfigFileType.MESSAGES, "minecraft.chat.message", String.class),
     MINECRAFT_CHAT_VANISHED_MESSAGE (ConfigFileType.MESSAGES, "minecraft.chat.vanished", String.class),
     MINECRAFT_SWITCH_ENABLED (ConfigFileType.MESSAGES, "minecraft.switch.enabled", Boolean.class),
     MINECRAFT_SWITCH_DEFAULT (ConfigFileType.MESSAGES, "minecraft.switch.default", String.class),
     MINECRAFT_SWITCH_SHORT  (ConfigFileType.MESSAGES, "minecraft.switch.no-from", String.class),
+    MINECRAFT_SWITCH_PROXY_SEND (ConfigFileType.MESSAGES, "minecraft.switch.proxy-send", Boolean.class),
     MINECRAFT_WHISPER_SEND (ConfigFileType.MESSAGES, "minecraft.whisper.send", String.class),
     MINECRAFT_WHISPER_RECEIVE (ConfigFileType.MESSAGES, "minecraft.whisper.receive", String.class),
     MINECRAFT_WHISPER_ERROR (ConfigFileType.MESSAGES, "minecraft.whisper.error", String.class),
@@ -135,6 +121,7 @@ public enum ConfigKey {
 
     // YepLib integration: configurable templates
     MINECRAFT_YEP_DEATH_MESSAGE (ConfigFileType.MESSAGES, "minecraft.death.message", String.class),
+    MINECRAFT_YEP_DEATH_PROXY_SEND (ConfigFileType.MESSAGES, "minecraft.death.proxy-send", Boolean.class),
     DISCORD_YEP_DEATH_MESSAGE (ConfigFileType.MESSAGES, "discord.death.message", String.class),
     DISCORD_YEP_DEATH_EMBED_TITLE (ConfigFileType.MESSAGES, "discord.death.embed.title", String.class),
     DISCORD_YEP_DEATH_EMBED_MESSAGE (ConfigFileType.MESSAGES, "discord.death.embed.description", String.class),
@@ -145,6 +132,7 @@ public enum ConfigKey {
     DISCORD_YEP_DEATH_EMBED_AUTHOR_TEXT (ConfigFileType.MESSAGES, "discord.death.embed.author-text", String.class),
     DISCORD_YEP_DEATH_EMBED_AUTHOR_ICON_URL (ConfigFileType.MESSAGES, "discord.death.embed.author-icon-url", String.class),
     MINECRAFT_YEP_ADVANCEMENT_MESSAGE (ConfigFileType.MESSAGES, "minecraft.advancement.message", String.class),
+    MINECRAFT_YEP_ADVANCEMENT_PROXY_SEND (ConfigFileType.MESSAGES, "minecraft.advancement.proxy-send", Boolean.class),
     DISCORD_YEP_ADVANCEMENT_MESSAGE (ConfigFileType.MESSAGES, "discord.advancement.message", String.class),
     DISCORD_YEP_ADVANCEMENT_EMBED_TITLE (ConfigFileType.MESSAGES, "discord.advancement.embed.title", String.class),
     DISCORD_YEP_ADVANCEMENT_EMBED_MESSAGE (ConfigFileType.MESSAGES, "discord.advancement.embed.description", String.class),
@@ -173,36 +161,6 @@ public enum ConfigKey {
     DISCORD_COMMAND_LIST_NO_PLAYERS_FORMAT (ConfigFileType.MESSAGES, "discord.command.list.no-players-format", String.class),
     DISCORD_COMMAND_LIST_SERVER_OFFLINE_FORMAT (ConfigFileType.MESSAGES, "discord.command.list.server-offline-format", String.class),
 
-    // Discord slash command: /link
-    DISCORD_COMMAND_LINK_ENABLED (ConfigFileType.MESSAGES, "discord.command.link.enabled", Boolean.class),
-    DISCORD_COMMAND_LINK_ALLOWED_ROLES (ConfigFileType.MESSAGES, "discord.command.link.allowed-roles", List.class),
-    DISCORD_COMMAND_LINK_EPHEMERAL (ConfigFileType.MESSAGES, "discord.command.link.ephemeral", Boolean.class),
-    DISCORD_COMMAND_LINK_USAGE (ConfigFileType.MESSAGES, "discord.command.link.usage", String.class),
-    DISCORD_COMMAND_LINK_SUCCESS (ConfigFileType.MESSAGES, "discord.command.link.success", String.class),
-    DISCORD_COMMAND_LINK_INVALID (ConfigFileType.MESSAGES, "discord.command.link.invalid", String.class),
-    DISCORD_COMMAND_LINK_EXPIRED (ConfigFileType.MESSAGES, "discord.command.link.expired", String.class),
-    DISCORD_COMMAND_LINK_ALREADY_USED (ConfigFileType.MESSAGES, "discord.command.link.already-used", String.class),
-    DISCORD_COMMAND_LINK_ALREADY_LINKED (ConfigFileType.MESSAGES, "discord.command.link.already-linked", String.class),
-    DISCORD_COMMAND_LINK_DB_ERROR (ConfigFileType.MESSAGES, "discord.command.link.db-error", String.class),
-
-    // Discord slash command: /check-link
-    DISCORD_COMMAND_CHECK_LINK_ENABLED (ConfigFileType.MESSAGES, "discord.command.check-link.enabled", Boolean.class),
-    DISCORD_COMMAND_CHECK_LINK_ALLOWED_ROLES (ConfigFileType.MESSAGES, "discord.command.check-link.allowed-roles", List.class),
-    DISCORD_COMMAND_CHECK_LINK_EPHEMERAL (ConfigFileType.MESSAGES, "discord.command.check-link.ephemeral", Boolean.class),
-    DISCORD_COMMAND_CHECK_LINK_USAGE (ConfigFileType.MESSAGES, "discord.command.check-link.usage", String.class),
-    DISCORD_COMMAND_CHECK_LINK_LINKED (ConfigFileType.MESSAGES, "discord.command.check-link.linked", String.class),
-    DISCORD_COMMAND_CHECK_LINK_NOT_LINKED (ConfigFileType.MESSAGES, "discord.command.check-link.not-linked", String.class),
-    DISCORD_COMMAND_CHECK_LINK_DB_ERROR (ConfigFileType.MESSAGES, "discord.command.check-link.db-error", String.class),
-
-    // Minecraft /link command messages
-    MINECRAFT_COMMAND_LINK_ALREADY_LINKED (ConfigFileType.MESSAGES, "minecraft.command.link.already-linked", String.class),
-    MINECRAFT_COMMAND_LINK_CODE (ConfigFileType.MESSAGES, "minecraft.command.link.code", String.class),
-    MINECRAFT_COMMAND_LINK_ERROR (ConfigFileType.MESSAGES, "minecraft.command.link.error", String.class),
-
-    // Minecraft /unlink command messages
-    MINECRAFT_COMMAND_UNLINK_SUCCESS (ConfigFileType.MESSAGES, "minecraft.command.unlink.success", String.class),
-    MINECRAFT_COMMAND_UNLINK_NOT_LINKED (ConfigFileType.MESSAGES, "minecraft.command.unlink.not-linked", String.class),
-    MINECRAFT_COMMAND_UNLINK_ERROR (ConfigFileType.MESSAGES, "minecraft.command.unlink.error", String.class),
     DISCORD_TOPIC_ONLINE (ConfigFileType.MESSAGES, "discord.topic.online", String.class),
     DISCORD_TOPIC_OFFLINE  (ConfigFileType.MESSAGES, "discord.topic.offline", String.class),
     DISCORD_PROXY_STATUS_ENABLED (ConfigFileType.MESSAGES, "discord.proxy-status.enabled", Boolean.class),

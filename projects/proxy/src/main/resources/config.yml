@@ -18,6 +18,17 @@ CHANNEL-ID: "GLOBAL_CHANNEL_ID"
 # Example: https://discord.gg/yourinvite
 discord-invite-url: ""
 
+# Optional: Override target Discord channel per message type. If not set, CHANNEL-ID is used.
+# Valid keys: chat, join, leave, switch, advancement, death
+# Example IDs must be strings. Leave commented or blank to disable per-type override.
+discord-channel-override:
+  # chat: "123456789012345678"
+  # join: "123456789012345678"
+  # leave: "123456789012345678"
+  # switch: "123456789012345678"
+  # advancement: "123456789012345678"
+  # death: "123456789012345678"
+
 webhook:
   # Global webhook URL for Discord chat messages.
   url: ""
@@ -133,30 +144,5 @@ commands:
 disabled-servers:
   - example1
 
-# Database configuration for account linking (PostgreSQL)
-database:
-  postgres:
-    enabled: false
-    host: "localhost"
-    port: 5432
-    database: "simpleproxychat"
-    username: "postgres"
-    password: "postgres"
-    ssl: false
-    pool:
-      maximum-pool-size: 10
-      minimum-idle: 2
-      connection-timeout-ms: 10000
-      idle-timeout-ms: 600000
-      max-lifetime-ms: 1800000
-
-# Linking system configuration
-linking:
-  enabled: false
-  # Length of generated link codes
-  code-length: 6
-  # Expiration for link codes, in minutes
-  expiration-minutes: 10
-
 # DO NOT TOUCH THIS
-file-version: 20
+file-version: 21

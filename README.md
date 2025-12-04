@@ -188,9 +188,40 @@ commands:
 disabled-servers:
    - example1
 
+# Optional: Override target Discord channel per message type. If not set, CHANNEL-ID is used.
+discord-channel-override:
+   chat: "123456789012345678"        # Minecraft chat -> this channel
+   join: "123456789012345678"        # Player join
+   leave: "123456789012345678"       # Player leave
+   switch: "123456789012345678"      # Server switch
+   advancement: "123456789012345678" # Advancements
+   death: "123456789012345678"       # Deaths
+
 # DO NOT TOUCH THIS
 file-version: 16
 ```
+
+### Per-message-type Discord channel overrides
+You can route different message types to different Discord channels. When an override is set for a type, the plugin will send that message to the specified channel ID instead of the global `CHANNEL-ID`. If an override is missing or blank, it falls back to `CHANNEL-ID`.
+
+Valid keys: `chat`, `join`, `leave`, `switch`, `advancement`, `death`.
+
+Example:
+```YAML
+# Optional: Override target Discord channel per message type. If not set, CHANNEL-ID is used.
+discord-channel-override:
+   chat: "123456789012345678"        # Minecraft chat -> this channel
+   join: "123456789012345678"        # Player join
+   leave: "123456789012345678"       # Player leave
+   switch: "123456789012345678"      # Server switch
+   advancement: "123456789012345678" # Advancements
+   death: "123456789012345678"       # Deaths
+```
+
+Notes:
+- Overrides apply to messages sent by the bot (plain or embed).
+- Messages sent via webhooks always go to the configured webhook URL channel(s) and ignore overrides.
+- For advancements/deaths: if `discord.advancement.webhook.send` or `discord.death.webhook.send` is true and `webhook.events-url` is set, those are sent via webhook (override not used). If not using webhooks, event embeds are sent by the bot and will use overrides.
 
 **messages.yml**
 ```YAML

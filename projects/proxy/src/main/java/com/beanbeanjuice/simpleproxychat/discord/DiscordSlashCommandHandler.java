@@ -1,10 +1,8 @@
 package com.beanbeanjuice.simpleproxychat.discord;
 
-import com.beanbeanjuice.simpleproxychat.linking.LinkService;
 import com.beanbeanjuice.simpleproxychat.utility.config.Config;
 import com.beanbeanjuice.simpleproxychat.utility.config.ConfigKey;
 import com.beanbeanjuice.simpleproxychat.utility.helper.Helper;
-import com.beanbeanjuice.simpleproxychat.utility.mojang.MojangResolver;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 
@@ -15,7 +13,6 @@ import java.util.stream.Collectors;
 public class DiscordSlashCommandHandler extends ListenerAdapter {
 
     private final Config config;
-    private final LinkService linkService;
     private final Supplier<Map<String, List<String>>> getVisiblePlayersByServer;
     // Additional suppliers for advanced formatting
     private final Supplier<Set<String>> getAllServerNames;
@@ -24,14 +21,12 @@ public class DiscordSlashCommandHandler extends ListenerAdapter {
 
     public DiscordSlashCommandHandler(
             final Config config,
-            final LinkService linkService,
             final Supplier<Map<String, List<String>>> getVisiblePlayersByServer,
             final Supplier<Set<String>> getAllServerNames,
             final Supplier<Map<String, Boolean>> getServerOnlineMap,
             final Supplier<Integer> getProxyMaxPlayers
     ) {
         this.config = config;
-        this.linkService = linkService;
         this.getVisiblePlayersByServer = getVisiblePlayersByServer;
         this.getAllServerNames = getAllServerNames;
         this.getServerOnlineMap = getServerOnlineMap;
@@ -48,213 +43,6 @@ public class DiscordSlashCommandHandler extends ListenerAdapter {
         if (configuredChannelId != null && !configuredChannelId.isBlank() &&
                 !event.getChannel().getId().equals(configuredChannelId)) {
             event.reply("Please use this command in <#" + configuredChannelId + ">.").setEphemeral(true).queue();
-            return;
-        }
-
-        // Handle /link
-        if ("link".equalsIgnoreCase(cmd)) {
-            boolean enabled = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_LINK_ENABLED).asBoolean()).orElse(false);
-            if (!enabled) {
-                event.reply("This command is disabled.").setEphemeral(true).queue();
-                return;
-            }
-
-            // Role check (IDs or names). If empty, allow everyone.
-            List<String> tempAllowed = null;
-            try { tempAllowed = config.get(ConfigKey.DISCORD_COMMAND_LINK_ALLOWED_ROLES).asList(); } catch (Exception ignored) {}
-            final List<String> allowedRoles = tempAllowed != null ? tempAllowed : Collections.emptyList();
-            if (event.getMember() != null && !allowedRoles.isEmpty()) {
-                final Set<String> allowedRoleIds = new HashSet<>(allowedRoles);
-                final Set<String> allowedRoleNamesLower = allowedRoles.stream().map(String::toLowerCase).collect(Collectors.toSet());
-                boolean hasRole = event.getMember().getRoles().stream().anyMatch(r ->
-                        allowedRoleIds.contains(r.getId()) || allowedRoleNamesLower.contains(r.getName().toLowerCase())
-                );
-                if (!hasRole) {
-                    event.reply("You do not have permission to use this command.").setEphemeral(true).queue();
-                    return;
-                }
-            }
-
-            boolean ephemeral = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_LINK_EPHEMERAL).asBoolean()).orElse(true);
-
-            if (linkService == null || !linkService.isEnabled()) {
-                String msg = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_LINK_DB_ERROR).asString()).orElse("Internal error");
-                event.reply(msg).setEphemeral(ephemeral).queue();
-                return;
-            }
-
-            String code = event.getOption("code") != null ? event.getOption("code").getAsString() : null;
-            if (code == null || code.isBlank()) {
-                String usage = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_LINK_USAGE).asString()).orElse("Use /link <code>.");
-                event.reply(usage).setEphemeral(ephemeral).queue();
-                return;
-            }
-
-            final String discordId = event.getUser().getId();
-
-            event.deferReply().setEphemeral(ephemeral).queue(hook -> {
-                try {
-                    if (linkService.isDiscordLinked(discordId)) {
-                        String already = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_LINK_ALREADY_LINKED).asString()).orElse("Already linked.");
-                        hook.editOriginal(already).queue();
-                        return;
-                    }
-
-                    LinkService.RedeemResult result = linkService.redeem(code.trim(), discordId);
-                    ConfigKey key;
-                    switch (result) {
-                        case SUCCESS -> key = ConfigKey.DISCORD_COMMAND_LINK_SUCCESS;
-                        case INVALID -> key = ConfigKey.DISCORD_COMMAND_LINK_INVALID;
-                        case EXPIRED -> key = ConfigKey.DISCORD_COMMAND_LINK_EXPIRED;
-                        case ALREADY_USED -> key = ConfigKey.DISCORD_COMMAND_LINK_ALREADY_USED;
-                        case ALREADY_LINKED -> key = ConfigKey.DISCORD_COMMAND_LINK_ALREADY_LINKED;
-                        default -> key = ConfigKey.DISCORD_COMMAND_LINK_DB_ERROR;
-                    }
-                    String reply = Optional.ofNullable(config.get(key).asString()).orElse("Done.");
-                    hook.editOriginal(reply).queue();
-                } catch (Exception ex) {
-                    String msg = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_LINK_DB_ERROR).asString()).orElse("Internal error");
-                    hook.editOriginal(msg).queue();
-                }
-            });
-            return;
-        }
-
-        // Handle /check-link
-        if ("check-link".equalsIgnoreCase(cmd)) {
-            boolean enabled = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_ENABLED).asBoolean()).orElse(false);
-            if (!enabled) {
-                event.reply("This command is disabled.").setEphemeral(true).queue();
-                return;
-            }
-
-            // Role check (IDs or names). If empty, allow everyone.
-            List<String> tempAllowed = null;
-            try { tempAllowed = config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_ALLOWED_ROLES).asList(); } catch (Exception ignored) {}
-            final List<String> allowedRoles = tempAllowed != null ? tempAllowed : Collections.emptyList();
-            if (event.getMember() != null && !allowedRoles.isEmpty()) {
-                final Set<String> allowedRoleIds = new HashSet<>(allowedRoles);
-                final Set<String> allowedRoleNamesLower = allowedRoles.stream().map(String::toLowerCase).collect(Collectors.toSet());
-                boolean hasRole = event.getMember().getRoles().stream().anyMatch(r ->
-                        allowedRoleIds.contains(r.getId()) || allowedRoleNamesLower.contains(r.getName().toLowerCase())
-                );
-                if (!hasRole) {
-                    event.reply("You do not have permission to use this command.").setEphemeral(true).queue();
-                    return;
-                }
-            }
-
-            boolean ephemeral = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_EPHEMERAL).asBoolean()).orElse(true);
-
-            if (linkService == null || !linkService.isEnabled()) {
-                String msg = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_DB_ERROR).asString()).orElse("Internal error");
-                event.reply(msg).setEphemeral(ephemeral).queue();
-                return;
-            }
-
-            final boolean hasDiscordUser = event.getOption("discord_user") != null;
-            final boolean hasDiscordId = event.getOption("discord_id") != null;
-            final boolean hasMinecraft = event.getOption("minecraft") != null;
-            final int provided = (hasDiscordUser ? 1 : 0) + (hasDiscordId ? 1 : 0) + (hasMinecraft ? 1 : 0);
-
-            if (provided > 1) {
-                String usage = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_USAGE).asString())
-                        .orElse("Please provide only one of: discord_user, discord_id, or minecraft.");
-                event.reply(usage).setEphemeral(true).queue();
-                return;
-            }
-
-            if (!hasDiscordUser && !hasDiscordId && !hasMinecraft) {
-                // Original behavior: check invoking user's Discord link status
-                final String discordId = event.getUser().getId();
-                event.deferReply().setEphemeral(ephemeral).queue(hook -> {
-                    try {
-                        boolean linked = linkService.isDiscordLinked(discordId);
-                        String reply = linked
-                                ? Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_LINKED).asString()).orElse("Linked.")
-                                : Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_NOT_LINKED).asString()).orElse("Not linked.");
-                        hook.editOriginal(reply).queue();
-                    } catch (Exception ex) {
-                        String msg = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_DB_ERROR).asString()).orElse("Internal error");
-                        hook.editOriginal(msg).queue();
-                    }
-                });
-                return;
-            }
-
-            // One of the options provided
-            if (hasDiscordUser || hasDiscordId) {
-                final String targetDiscordId = hasDiscordUser
-                        ? event.getOption("discord_user").getAsUser().getId()
-                        : Optional.ofNullable(event.getOption("discord_id").getAsString()).map(String::trim).orElse("");
-
-                if (targetDiscordId.isBlank()) {
-                    String usage = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_USAGE).asString())
-                            .orElse("Please provide a valid Discord user or ID.");
-                    event.reply(usage).setEphemeral(true).queue();
-                    return;
-                }
-
-                event.deferReply().setEphemeral(ephemeral).queue(hook -> {
-                    try {
-                        Optional<UUID> mc = linkService.getMinecraftUuidForDiscord(targetDiscordId);
-                        if (mc.isPresent()) {
-                            String reply = "✅ Linked: <@" + targetDiscordId + "> ↔ " + mc.get();
-                            hook.editOriginal(reply).queue();
-                        } else {
-                            String reply = "ℹ️ Not linked: <@" + targetDiscordId + "> has no linked Minecraft account.";
-                            hook.editOriginal(reply).queue();
-                        }
-                    } catch (Exception ex) {
-                        String msg = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_DB_ERROR).asString()).orElse("Internal error");
-                        hook.editOriginal(msg).queue();
-                    }
-                });
-                return;
-            }
-
-            if (hasMinecraft) {
-                final String input = Optional.ofNullable(event.getOption("minecraft").getAsString()).map(String::trim).orElse("");
-                if (input.isBlank()) {
-                    String usage = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_USAGE).asString())
-                            .orElse("Please provide a Minecraft username or UUID.");
-                    event.reply(usage).setEphemeral(true).queue();
-                    return;
-                }
-
-                event.deferReply().setEphemeral(ephemeral).queue(hook -> {
-                    try {
-                        UUID mcUuid = null;
-                        try { mcUuid = UUID.fromString(input); } catch (Exception ignored) {}
-                        if (mcUuid == null && input.matches("(?i)^[0-9a-f]{32}$")) {
-                            String dashed = input.replaceFirst("(?i)(.{8})(.{4})(.{4})(.{4})(.{12})", "$1-$2-$3-$4-$5");
-                            try { mcUuid = UUID.fromString(dashed); } catch (Exception ignored) {}
-                        }
-                        if (mcUuid == null) {
-                            mcUuid = MojangResolver.resolveUuid(input).orElse(null);
-                        }
-
-                        if (mcUuid == null) {
-                            hook.editOriginal("❌ Invalid Minecraft username/UUID.").queue();
-                            return;
-                        }
-
-                        Optional<String> discord = linkService.getDiscordIdForMinecraft(mcUuid);
-                        if (discord.isPresent()) {
-                            String reply = "✅ Linked: " + mcUuid + " ↔ <@" + discord.get() + ">";
-                            hook.editOriginal(reply).queue();
-                        } else {
-                            String reply = "ℹ️ Not linked: " + mcUuid + " has no linked Discord account.";
-                            hook.editOriginal(reply).queue();
-                        }
-                    } catch (Exception ex) {
-                        String msg = Optional.ofNullable(config.get(ConfigKey.DISCORD_COMMAND_CHECK_LINK_DB_ERROR).asString()).orElse("Internal error");
-                        hook.editOriginal(msg).queue();
-                    }
-                });
-                return;
-            }
-
             return;
         }
 

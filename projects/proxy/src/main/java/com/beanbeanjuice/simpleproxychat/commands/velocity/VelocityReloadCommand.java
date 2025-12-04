@@ -25,6 +25,11 @@ public class VelocityReloadCommand implements SimpleCommand {
 
         config.reload();
         plugin.getDiscordBot().updateActivity();
+        
+        // Rebuild regex cache after config reload for performance
+        if (plugin.getServerListener() != null && plugin.getServerListener().getChatHandler() != null) {
+            plugin.getServerListener().getChatHandler().rebuildRegexCache();
+        }
 
         String message = config.get(ConfigKey.MINECRAFT_COMMAND_RELOAD).asString();
         message = Helper.replaceKeys(

@@ -83,6 +83,35 @@ public class Bot {
     }
 
     /**
+     * Send a plain message to a specific channel ID, bypassing the globally configured CHANNEL-ID.
+     */
+    public void sendMessageToChannelId(final String channelId, final String messageToSend) {
+        if (bot == null) return;
+        if (channelId == null || channelId.isBlank()) { sendMessage(messageToSend); return; }
+
+        this.getTextChannelById(channelId).ifPresentOrElse(
+                (targetChannel) -> {
+                    String message = Helper.sanitize(messageToSend);
+                    message = Arrays.stream(message.split(" ")).map((originalString) -> {
+                        if (!originalString.startsWith("@")) return originalString;
+                        String name = originalString.replace("@", "");
+
+                        List<Member> potentialMembers = targetChannel.getMembers();
+                        Optional<Member> potentialMember = potentialMembers
+                                .stream()
+                                .filter((member) -> ((member.getNickname() != null && member.getNickname().equalsIgnoreCase(name)) || member.getEffectiveName().equalsIgnoreCase(name)))
+                                .findFirst();
+
+                        return potentialMember.map(IMentionable::getAsMention).orElse(originalString);
+                    }).collect(Collectors.joining(" "));
+
+                    targetChannel.sendMessage(message).queue();
+                },
+                () -> errorLogger.accept("There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?")
+        );
+    }
+
+    /**
      * Embed needs to be sanitized before running this function.
      * @param embed The {@link MessageEmbed} to send in the channel.
      */
@@ -95,8 +124,30 @@ public class Bot {
         );
     }
 
+    /**
+     * Send an embed to a specific channel ID, bypassing the globally configured CHANNEL-ID.
+     */
+    public void sendMessageEmbedToChannelId(final String channelId, final MessageEmbed embed) {
+        if (bot == null) return;
+        if (channelId == null || channelId.isBlank()) { sendMessageEmbed(embed); return; }
+
+        this.getTextChannelById(channelId).ifPresentOrElse(
+                (channel) -> channel.sendMessageEmbeds(sanitizeEmbed(embed)).queue(),
+                () -> errorLogger.accept("There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?")
+        );
+    }
+
     public Optional<TextChannel> getBotTextChannel() {
         return Optional.ofNullable(bot.getTextChannelById(config.get(ConfigKey.CHANNEL_ID).asString()));
+    }
+
+    private Optional<TextChannel> getTextChannelById(final String channelId) {
+        if (bot == null) return Optional.empty();
+        try {
+            return Optional.ofNullable(bot.getTextChannelById(channelId));
+        } catch (Throwable t) {
+            return Optional.empty();
+        }
     }
 
     private MessageEmbed sanitizeEmbed(final MessageEmbed oldEmbed) {

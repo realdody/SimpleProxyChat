@@ -208,9 +208,19 @@ public class VelocityServerListener {
                         .forEach((player) -> player.sendMessage(MiniMessage.miniMessage().deserialize(message)));
     }
 
-    private void sendToAllServersJoinFiltered(String message, Permission permission, UUID subjectUUID, String subjectServerName) {
-        boolean excludeSelf = plugin.getConfig().get(ConfigKey.MINECRAFT_JOIN_RECIPIENTS_EXCLUDE_SELF).asBoolean();
-        boolean excludeServer = plugin.getConfig().get(ConfigKey.MINECRAFT_JOIN_RECIPIENTS_EXCLUDE_SERVER).asBoolean();
+    /**
+     * Sends a filtered message to all servers, with configurable exclusions.
+     * @param message The message to send
+     * @param permission The permission required to receive the message
+     * @param subjectUUID The UUID of the subject player (for exclude-self filtering)
+     * @param subjectServerName The server name of the subject (for exclude-server filtering)
+     * @param excludeSelfKey The config key for exclude-self setting
+     * @param excludeServerKey The config key for exclude-server setting
+     */
+    private void sendToAllServersFiltered(String message, Permission permission, UUID subjectUUID, 
+                                          String subjectServerName, ConfigKey excludeSelfKey, ConfigKey excludeServerKey) {
+        boolean excludeSelf = plugin.getConfig().get(excludeSelfKey).asBoolean();
+        boolean excludeServer = plugin.getConfig().get(excludeServerKey).asBoolean();
 
         plugin.getProxyServer().getAllPlayers().stream()
                 .filter((player) -> {
@@ -243,39 +253,14 @@ public class VelocityServerListener {
         }
     }
 
+    private void sendToAllServersJoinFiltered(String message, Permission permission, UUID subjectUUID, String subjectServerName) {
+        sendToAllServersFiltered(message, permission, subjectUUID, subjectServerName,
+                ConfigKey.MINECRAFT_JOIN_RECIPIENTS_EXCLUDE_SELF, ConfigKey.MINECRAFT_JOIN_RECIPIENTS_EXCLUDE_SERVER);
+    }
+
     private void sendToAllServersLeaveFiltered(String message, Permission permission, UUID subjectUUID, String subjectServerName) {
-        boolean excludeSelf = plugin.getConfig().get(ConfigKey.MINECRAFT_LEAVE_RECIPIENTS_EXCLUDE_SELF).asBoolean();
-        boolean excludeServer = plugin.getConfig().get(ConfigKey.MINECRAFT_LEAVE_RECIPIENTS_EXCLUDE_SERVER).asBoolean();
-
-        plugin.getProxyServer().getAllPlayers().stream()
-                .filter((player) -> {
-                    if (plugin.getConfig().get(ConfigKey.USE_PERMISSIONS).asBoolean())
-                        return player.hasPermission(permission.getPermissionNode());
-                    return true;
-                })
-                .filter((player) -> !playerIsInDisabledServer(player, plugin))
-                .filter((player) -> !excludeSelf || !player.getUniqueId().equals(subjectUUID))
-                // Ensure the subject is not included in the stream when excluding the server to avoid duplicates
-                .filter((player) -> !(excludeServer && player.getUniqueId().equals(subjectUUID)))
-                .filter((player) -> {
-                    if (!excludeServer) return true;
-                    return player.getCurrentServer()
-                            .map(ServerConnection::getServerInfo)
-                            .map(ServerInfo::getName)
-                            .map((name) -> !name.equalsIgnoreCase(subjectServerName))
-                            .orElse(true);
-                })
-                .forEach((player) -> player.sendMessage(MiniMessage.miniMessage().deserialize(message)));
-
-        // If excluding the server but not the subject, explicitly send to the subject to keep behavior consistent
-        if (excludeServer && !excludeSelf) {
-            plugin.getProxyServer().getPlayer(subjectUUID).ifPresent((subjectPlayer) -> {
-                if (plugin.getConfig().get(ConfigKey.USE_PERMISSIONS).asBoolean()
-                        && !subjectPlayer.hasPermission(permission.getPermissionNode())) return;
-                if (playerIsInDisabledServer(subjectPlayer, plugin)) return;
-                subjectPlayer.sendMessage(MiniMessage.miniMessage().deserialize(message));
-            });
-        }
+        sendToAllServersFiltered(message, permission, subjectUUID, subjectServerName,
+                ConfigKey.MINECRAFT_LEAVE_RECIPIENTS_EXCLUDE_SELF, ConfigKey.MINECRAFT_LEAVE_RECIPIENTS_EXCLUDE_SERVER);
     }
 
 }
