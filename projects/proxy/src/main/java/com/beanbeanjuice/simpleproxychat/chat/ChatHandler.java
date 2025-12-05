@@ -33,6 +33,11 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class ChatHandler {
 
@@ -60,6 +65,28 @@ public class ChatHandler {
 
     private volatile List<CompiledRegexRule> compiledRegexCache = new ArrayList<>();
 
+    // Cache for compiled filter word patterns to avoid recompilation on every
+    // message
+    private static class CompiledFilterRule {
+        final Pattern pattern;
+        final String replacement;
+
+        CompiledFilterRule(Pattern pattern, String replacement) {
+            this.pattern = pattern;
+            this.replacement = replacement;
+        }
+    }
+
+    private volatile List<CompiledFilterRule> compiledFilterCache = new ArrayList<>();
+
+    // Single-threaded executor for regex timeout protection (avoids
+    // thread-per-message overhead)
+    private final ExecutorService regexExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "SPC-RegexWorker");
+        t.setDaemon(true);
+        return t;
+    });
+
     public ChatHandler(ISimpleProxyChat plugin) {
         this.plugin = plugin;
         this.config = plugin.getSPCConfig();
@@ -70,6 +97,7 @@ public class ChatHandler {
 
         // Pre-compile regex patterns for performance
         rebuildRegexCache();
+        rebuildFilterCache();
 
         plugin.getDiscordBot().addRunnableToQueue(() -> plugin.getDiscordBot().getJDA()
                 .ifPresent((jda) -> jda.addEventListener(new DiscordChatHandler(config, this::sendFromDiscord))));
@@ -108,6 +136,50 @@ public class ChatHandler {
         }
 
         this.compiledRegexCache = newCache;
+    }
+
+    /**
+     * Rebuilds the filter word pattern cache from config. Call this after config
+     * reload.
+     */
+    public void rebuildFilterCache() {
+        List<CompiledFilterRule> newCache = new ArrayList<>();
+
+        Map<String, String> combined = new LinkedHashMap<>();
+        Map<String, String> specific = Optional.ofNullable(config.getFilterReplacements())
+                .orElseGet(Collections::emptyMap);
+        combined.putAll(specific);
+        List<String> globals = Optional.ofNullable(config.getFilterGlobalWords()).orElseGet(Collections::emptyList);
+        for (String gw : globals) {
+            if (!combined.containsKey(gw))
+                combined.put(gw, config.getFilterDefaultReplacement());
+        }
+
+        if (combined.isEmpty()) {
+            this.compiledFilterCache = newCache;
+            return;
+        }
+
+        int flags = 0;
+        if (config.isFilterCaseInsensitive())
+            flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+
+        for (Map.Entry<String, String> e : combined.entrySet()) {
+            String key = e.getKey();
+            if (key == null || key.isEmpty())
+                continue;
+            String replacement = e.getValue() == null ? "" : e.getValue();
+            String core = Pattern.quote(key);
+            String patternStr = config.isFilterWholeWord() ? "\\b" + core + "\\b" : core;
+            try {
+                Pattern compiled = Pattern.compile(patternStr, flags);
+                newCache.add(new CompiledFilterRule(compiled, replacement));
+            } catch (Exception ex) {
+                plugin.log("Invalid filter pattern: " + key + " - " + ex.getMessage());
+            }
+        }
+
+        this.compiledFilterCache = newCache;
     }
 
     private Optional<String> getValidMessage(String message) {
@@ -477,37 +549,12 @@ public class ChatHandler {
     }
 
     private String applyFilterPlain(String input) {
-        if (input.isEmpty())
+        if (input.isEmpty() || compiledFilterCache.isEmpty())
             return input;
+
         String result = input;
-
-        // Build combined replacement map: specific replacements + global words ->
-        // default
-        Map<String, String> combined = new LinkedHashMap<>();
-        Map<String, String> specific = Optional.ofNullable(config.getFilterReplacements())
-                .orElseGet(Collections::emptyMap);
-        combined.putAll(specific);
-        List<String> globals = Optional.ofNullable(config.getFilterGlobalWords()).orElseGet(Collections::emptyList);
-        for (String gw : globals) {
-            if (!combined.containsKey(gw))
-                combined.put(gw, config.getFilterDefaultReplacement());
-        }
-
-        if (combined.isEmpty())
-            return result;
-
-        int flags = 0;
-        if (config.isFilterCaseInsensitive())
-            flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
-
-        for (Map.Entry<String, String> e : combined.entrySet()) {
-            String key = e.getKey();
-            if (key == null || key.isEmpty())
-                continue;
-            String replacement = e.getValue() == null ? "" : e.getValue();
-            String core = Pattern.quote(key);
-            String pattern = config.isFilterWholeWord() ? "\\b" + core + "\\b" : core;
-            result = Pattern.compile(pattern, flags).matcher(result).replaceAll(Matcher.quoteReplacement(replacement));
+        for (CompiledFilterRule rule : compiledFilterCache) {
+            result = rule.pattern.matcher(result).replaceAll(Matcher.quoteReplacement(rule.replacement));
         }
         return result;
     }
@@ -534,33 +581,24 @@ public class ChatHandler {
 
     /**
      * Performs a regex replacement with timeout protection against ReDoS attacks.
-     * Uses an interruptible approach to prevent catastrophic backtracking from
-     * blocking.
+     * Uses a shared ExecutorService to avoid thread-per-message overhead.
      */
     private String safeReplaceAll(Pattern pattern, String input, String replacement) {
-        final String[] resultHolder = { input };
-        final Thread workerThread = new Thread(() -> {
-            try {
-                // Don't use quoteReplacement - filter.yml regex rules may contain
-                // backreferences like $0
-                resultHolder[0] = pattern.matcher(input).replaceAll(replacement);
-            } catch (Exception ignored) {
-            }
+        Future<String> future = regexExecutor.submit(() -> {
+            // Don't use quoteReplacement - filter.yml regex rules may contain
+            // backreferences like $0
+            return pattern.matcher(input).replaceAll(replacement);
         });
 
-        workerThread.start();
         try {
-            workerThread.join(REGEX_TIMEOUT_MS);
-            if (workerThread.isAlive()) {
-                workerThread.interrupt();
-                plugin.log("[WARNING] Regex pattern timed out (potential ReDoS): " + pattern.pattern());
-                return input; // Return original input on timeout
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            return future.get(REGEX_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            plugin.log("[WARNING] Regex pattern timed out (potential ReDoS): " + pattern.pattern());
+            return input;
+        } catch (Exception e) {
             return input;
         }
-        return resultHolder[0];
     }
 
     public void runProxyLeaveMessage(String playerName, UUID playerUUID, String serverName,

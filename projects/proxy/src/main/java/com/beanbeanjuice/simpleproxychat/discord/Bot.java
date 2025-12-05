@@ -39,7 +39,8 @@ public class Bot {
 
     private boolean channelTopicErrorSent = false;
 
-    public Bot(final Config config, final Consumer<String> errorLogger, final Supplier<Integer> getOnlinePlayers, final Supplier<Integer> getMaxPlayers) {
+    public Bot(final Config config, final Consumer<String> errorLogger, final Supplier<Integer> getOnlinePlayers,
+            final Supplier<Integer> getMaxPlayers) {
         this.config = config;
         this.errorLogger = errorLogger;
 
@@ -58,83 +59,95 @@ public class Bot {
     }
 
     public void sendMessage(final String messageToSend) {
-        if (bot == null) return;
+        if (bot == null)
+            return;
 
         this.getBotTextChannel().ifPresentOrElse(
                 (mainTextChannel) -> {
-                    String message = Helper.sanitize(messageToSend);
-                    message = Arrays.stream(message.split(" ")).map((originalString) -> {
-                        if (!originalString.startsWith("@")) return originalString;
-                        String name = originalString.replace("@", "");
-
-                        List<Member> potentialMembers = mainTextChannel.getMembers();
-                        Optional<Member> potentialMember = potentialMembers
-                                .stream()
-                                .filter((member) -> ((member.getNickname() != null && member.getNickname().equalsIgnoreCase(name)) || member.getEffectiveName().equalsIgnoreCase(name)))
-                                .findFirst();
-
-                        return potentialMember.map(IMentionable::getAsMention).orElse(originalString);
-                    }).collect(Collectors.joining(" "));
-
-                    mainTextChannel.sendMessage(message).queue();
+                    String message = resolveMentions(mainTextChannel, messageToSend);
+                    mainTextChannel.sendMessage(message)
+                            .setAllowedMentions(EnumSet.of(Message.MentionType.USER))
+                            .queue();
                 },
-                () -> errorLogger.accept("There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?")
-        );
+                () -> errorLogger.accept(
+                        "There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?"));
     }
 
     /**
-     * Send a plain message to a specific channel ID, bypassing the globally configured CHANNEL-ID.
+     * Send a plain message to a specific channel ID, bypassing the globally
+     * configured CHANNEL-ID.
      */
     public void sendMessageToChannelId(final String channelId, final String messageToSend) {
-        if (bot == null) return;
-        if (channelId == null || channelId.isBlank()) { sendMessage(messageToSend); return; }
+        if (bot == null)
+            return;
+        if (channelId == null || channelId.isBlank()) {
+            sendMessage(messageToSend);
+            return;
+        }
 
         this.getTextChannelById(channelId).ifPresentOrElse(
                 (targetChannel) -> {
-                    String message = Helper.sanitize(messageToSend);
-                    message = Arrays.stream(message.split(" ")).map((originalString) -> {
-                        if (!originalString.startsWith("@")) return originalString;
-                        String name = originalString.replace("@", "");
-
-                        List<Member> potentialMembers = targetChannel.getMembers();
-                        Optional<Member> potentialMember = potentialMembers
-                                .stream()
-                                .filter((member) -> ((member.getNickname() != null && member.getNickname().equalsIgnoreCase(name)) || member.getEffectiveName().equalsIgnoreCase(name)))
-                                .findFirst();
-
-                        return potentialMember.map(IMentionable::getAsMention).orElse(originalString);
-                    }).collect(Collectors.joining(" "));
-
-                    targetChannel.sendMessage(message).queue();
+                    String message = resolveMentions(targetChannel, messageToSend);
+                    targetChannel.sendMessage(message)
+                            .setAllowedMentions(EnumSet.of(Message.MentionType.USER))
+                            .queue();
                 },
-                () -> errorLogger.accept("There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?")
-        );
+                () -> errorLogger.accept(
+                        "There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?"));
+    }
+
+    /**
+     * Resolves @username mentions in a message to Discord mention format.
+     * Sanitizes the message and converts @name to <@id> for matching members.
+     */
+    private String resolveMentions(TextChannel channel, String messageToSend) {
+        String message = Helper.sanitize(messageToSend);
+        List<Member> members = channel.getMembers();
+        return Arrays.stream(message.split(" ")).map((originalString) -> {
+            if (!originalString.startsWith("@"))
+                return originalString;
+            String name = originalString.replace("@", "");
+
+            Optional<Member> potentialMember = members.stream()
+                    .filter((member) -> (member.getNickname() != null && member.getNickname().equalsIgnoreCase(name))
+                            || member.getEffectiveName().equalsIgnoreCase(name))
+                    .findFirst();
+
+            return potentialMember.map(IMentionable::getAsMention).orElse(originalString);
+        }).collect(Collectors.joining(" "));
     }
 
     /**
      * Embed needs to be sanitized before running this function.
+     * 
      * @param embed The {@link MessageEmbed} to send in the channel.
      */
     public void sendMessageEmbed(final MessageEmbed embed) {
-        if (bot == null) return;
+        if (bot == null)
+            return;
 
         this.getBotTextChannel().ifPresentOrElse(
                 (channel) -> channel.sendMessageEmbeds(sanitizeEmbed(embed)).queue(),
-                () -> errorLogger.accept("There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?")
-        );
+                () -> errorLogger.accept(
+                        "There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?"));
     }
 
     /**
-     * Send an embed to a specific channel ID, bypassing the globally configured CHANNEL-ID.
+     * Send an embed to a specific channel ID, bypassing the globally configured
+     * CHANNEL-ID.
      */
     public void sendMessageEmbedToChannelId(final String channelId, final MessageEmbed embed) {
-        if (bot == null) return;
-        if (channelId == null || channelId.isBlank()) { sendMessageEmbed(embed); return; }
+        if (bot == null)
+            return;
+        if (channelId == null || channelId.isBlank()) {
+            sendMessageEmbed(embed);
+            return;
+        }
 
         this.getTextChannelById(channelId).ifPresentOrElse(
                 (channel) -> channel.sendMessageEmbeds(sanitizeEmbed(embed)).queue(),
-                () -> errorLogger.accept("There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?")
-        );
+                () -> errorLogger.accept(
+                        "There was an error sending a message to Discord. Does the channel exist? Does the bot have access to the channel?"));
     }
 
     public Optional<TextChannel> getBotTextChannel() {
@@ -142,7 +155,8 @@ public class Bot {
     }
 
     private Optional<TextChannel> getTextChannelById(final String channelId) {
-        if (bot == null) return Optional.empty();
+        if (bot == null)
+            return Optional.empty();
         try {
             return Optional.ofNullable(bot.getTextChannelById(channelId));
         } catch (Throwable t) {
@@ -160,8 +174,7 @@ public class Bot {
             embedBuilder.setAuthor(
                     Helper.sanitize(oldEmbed.getAuthor().getName()),
                     oldEmbed.getAuthor().getUrl(),
-                    oldEmbed.getAuthor().getIconUrl()
-            );
+                    oldEmbed.getAuthor().getIconUrl());
 
         if (oldEmbed.getDescription() != null)
             embedBuilder.setDescription(Helper.sanitize(oldEmbed.getDescription()));
@@ -169,19 +182,17 @@ public class Bot {
         if (oldEmbed.getFooter() != null)
             embedBuilder.setFooter(
                     Helper.sanitize(oldEmbed.getFooter().getText()),
-                    oldEmbed.getFooter().getIconUrl()
-            );
+                    oldEmbed.getFooter().getIconUrl());
 
         if (!oldEmbed.getFields().isEmpty()) {
-            List<MessageEmbed.Field> fields = new ArrayList<>(oldEmbed.getFields());  // Make copy.
-            embedBuilder.clearFields();  // Clear fields.
+            List<MessageEmbed.Field> fields = new ArrayList<>(oldEmbed.getFields()); // Make copy.
+            embedBuilder.clearFields(); // Clear fields.
 
             for (MessageEmbed.Field field : fields) {
                 embedBuilder.addField(
                         Helper.sanitize(field.getName()),
                         Helper.sanitize(field.getValue()),
-                        field.isInline()
-                );
+                        field.isInline());
             }
         }
 
@@ -189,7 +200,8 @@ public class Bot {
     }
 
     public void updateChannelTopic(final String topic) {
-        if (bot == null) return;
+        if (bot == null)
+            return;
 
         this.getBotTextChannel().ifPresentOrElse(
                 (textChannel) -> {
@@ -198,21 +210,24 @@ public class Bot {
                     } catch (InsufficientPermissionException e) {
                         if (!channelTopicErrorSent) {
                             channelTopicErrorSent = true;
-                            errorLogger.accept("""
-                                    No permission to edit channel topic. If you don't want the channel topics to be updated, \
-                                    simply ignore this message. Otherwise, please give the Discord bot the MANAGE_CHANNELS \
-                                    permission. This message will only be sent once per server restart. \
-                                    """);
+                            errorLogger
+                                    .accept("""
+                                            No permission to edit channel topic. If you don't want the channel topics to be updated, \
+                                            simply ignore this message. Otherwise, please give the Discord bot the MANAGE_CHANNELS \
+                                            permission. This message will only be sent once per server restart. \
+                                            """);
                         }
                     }
                 },
-                () -> errorLogger.accept("There was an error updating the Discord channel topic. Does the channel exist? Does the bot have access to the channel?")
-        );
+                () -> errorLogger.accept(
+                        "There was an error updating the Discord channel topic. Does the channel exist? Does the bot have access to the channel?"));
     }
 
     public void channelUpdaterFunction() {
-        if (bot == null) return;
-        String topicMessage = config.get(ConfigKey.DISCORD_TOPIC_ONLINE).asString().replace("%online%", String.valueOf(getOnlinePlayers.get()));
+        if (bot == null)
+            return;
+        String topicMessage = config.get(ConfigKey.DISCORD_TOPIC_ONLINE).asString().replace("%online%",
+                String.valueOf(getOnlinePlayers.get()));
         this.updateChannelTopic(topicMessage);
     }
 
@@ -226,7 +241,8 @@ public class Bot {
 
     public void start() throws InterruptedException {
         String token = config.get(ConfigKey.BOT_TOKEN).asString();
-        if (token.isEmpty() || token.equalsIgnoreCase("TOKEN_HERE") || token.equalsIgnoreCase("null")) return;
+        if (token.isEmpty() || token.equalsIgnoreCase("TOKEN_HERE") || token.equalsIgnoreCase("null"))
+            return;
 
         bot = JDABuilder
                 .createLight(token)
@@ -237,14 +253,15 @@ public class Bot {
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS)
                 .build().awaitReady();
 
-        // Load Discord username mention completions from the configured channel
+        // Load Discord display name mention completions from the configured channel
         this.getBotTextChannel().ifPresent(channel -> {
             try {
                 this.mentionCompletions = channel.getMembers()
                         .stream()
-                        .map(m -> "@" + m.getUser().getName())
+                        .map(m -> "@" + m.getEffectiveName())
                         .collect(Collectors.toList());
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         });
 
         sendProxyStatus(true);
@@ -272,7 +289,7 @@ public class Bot {
             }
 
             text = text.replace("%online%", String.valueOf(onlinePlayers))
-                       .replace("%max-players%", String.valueOf(maxPlayers));
+                    .replace("%max-players%", String.valueOf(maxPlayers));
             jda.getPresence().setActivity(Activity.of(type, text));
         });
     }
@@ -291,27 +308,27 @@ public class Bot {
     }
 
     public void sendProxyStatus(final boolean isStart) {
-        if (!config.get(ConfigKey.DISCORD_PROXY_STATUS_ENABLED).asBoolean()) return;
+        if (!config.get(ConfigKey.DISCORD_PROXY_STATUS_ENABLED).asBoolean())
+            return;
 
         if (isStart) {
             this.sendMessageEmbed(
                     new EmbedBuilder()
                             .setTitle(config.get(ConfigKey.DISCORD_PROXY_STATUS_MODULE_ENABLED).asString())
                             .setColor(Color.GREEN)
-                            .build()
-            );
+                            .build());
         } else {
             this.sendMessageEmbed(
                     new EmbedBuilder()
                             .setTitle(config.get(ConfigKey.DISCORD_PROXY_STATUS_MODULE_DISABLED).asString())
                             .setColor(Color.RED)
-                            .build()
-            );
+                            .build());
         }
     }
 
     public void stop() {
-        if (bot == null) return;
+        if (bot == null)
+            return;
         sendProxyStatus(false);
 
         this.updateChannelTopic(config.get(ConfigKey.DISCORD_TOPIC_OFFLINE).asString());
@@ -323,26 +340,36 @@ public class Bot {
                     jda.shutdownNow(); // Cancel all remaining requests
                     jda.awaitShutdown(); // Wait until shutdown is complete (indefinitely)
                 }
-            } catch (InterruptedException ignored) { }
+            } catch (InterruptedException ignored) {
+            }
         });
     }
 
     /**
-     * Adds Discord username chat completions ("@username") to the provided Velocity player.
-     * If the bot or member list isn't ready yet, this will be queued and applied once ready.
+     * Adds Discord username chat completions ("@username") to the provided Velocity
+     * player.
+     * If the bot or member list isn't ready yet, this will be queued and applied
+     * once ready.
      */
     public void sendChatCompletions(final Player player) {
-        if (player == null) return;
+        if (player == null)
+            return;
         if (this.mentionCompletions == null) {
             // Queue until after ready and members fetched
             this.addRunnableToQueue(() -> {
                 if (this.mentionCompletions != null) {
-                    try { player.addCustomChatCompletions(this.mentionCompletions); } catch (Throwable ignored) { }
+                    try {
+                        player.addCustomChatCompletions(this.mentionCompletions);
+                    } catch (Throwable ignored) {
+                    }
                 }
             });
             return;
         }
-        try { player.addCustomChatCompletions(this.mentionCompletions); } catch (Throwable ignored) { }
+        try {
+            player.addCustomChatCompletions(this.mentionCompletions);
+        } catch (Throwable ignored) {
+        }
     }
 
 }
