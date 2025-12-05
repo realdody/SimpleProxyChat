@@ -102,7 +102,7 @@ discord:
     use-embed: true
     first-time:
       enabled: true
-      message: Welcome %player% to the server for the first time!
+      message: Welcome %player% to the network for the first time!
   leave:
     enabled: true
     message: '%player% has left the network. (%server%)'

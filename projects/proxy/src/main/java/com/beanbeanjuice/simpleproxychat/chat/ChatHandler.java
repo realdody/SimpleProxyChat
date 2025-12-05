@@ -769,6 +769,52 @@ public class ChatHandler {
         return MINECRAFT_PLAYER_HEAD_URL.replace("{PLAYER_UUID}", playerUUID.toString());
     }
 
+    /*
+     * Classifies a Discord attachment into a user-friendly label
+     * based on content type and file extension.
+     * Returns: GIF, Video, Image, Audio, or File
+     */
+    private String getAttachmentTypeLabel(net.dv8tion.jda.api.entities.Message.Attachment attachment) {
+        String contentType = attachment.getContentType();
+        String fileName = attachment.getFileName().toLowerCase();
+
+        // GIF detection (check extension first for animated GIFs)
+        if (fileName.endsWith(".gif") || (contentType != null && contentType.equalsIgnoreCase("image/gif"))) {
+            return "GIF";
+        }
+
+        // Video detection
+        if (attachment.isVideo() || (contentType != null && contentType.startsWith("video/"))) {
+            return "Video";
+        }
+
+        // Image detection (after GIF check)
+        if (attachment.isImage() || (contentType != null && contentType.startsWith("image/"))) {
+            return "Image";
+        }
+
+        // Audio detection
+        if (contentType != null && contentType.startsWith("audio/")) {
+            return "Audio";
+        }
+
+        // File extension fallback for common types
+        if (fileName.endsWith(".mp4") || fileName.endsWith(".webm") || fileName.endsWith(".mov") ||
+                fileName.endsWith(".avi") || fileName.endsWith(".mkv")) {
+            return "Video";
+        }
+        if (fileName.endsWith(".mp3") || fileName.endsWith(".wav") || fileName.endsWith(".ogg") ||
+                fileName.endsWith(".flac") || fileName.endsWith(".m4a")) {
+            return "Audio";
+        }
+        if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") ||
+                fileName.endsWith(".webp") || fileName.endsWith(".bmp")) {
+            return "Image";
+        }
+
+        return "File";
+    }
+
     // Resolve per-message-type override channel ID from config, or null if not set
     private String resolveOverrideChannelId(MessageType type) {
         try {
@@ -832,9 +878,13 @@ public class ChatHandler {
         if (attachments != null && !attachments.isEmpty()) {
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < attachments.size(); i++) {
-                String url = attachments.get(i).getUrl();
+                net.dv8tion.jda.api.entities.Message.Attachment attachment = attachments.get(i);
+                String url = attachment.getUrl();
                 String escapedUrl = url.replace("\"", "\\\"");
-                String label = attachments.size() == 1 ? "Attachment" : ("Attachment " + (i + 1));
+                String label = getAttachmentTypeLabel(attachment);
+                if (attachments.size() > 1) {
+                    label = label + " " + (i + 1);
+                }
                 if (i > 0)
                     sb.append(" ");
                 sb.append(String.format(
