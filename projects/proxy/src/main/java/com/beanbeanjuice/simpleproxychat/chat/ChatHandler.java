@@ -541,7 +541,9 @@ public class ChatHandler {
         final String[] resultHolder = { input };
         final Thread workerThread = new Thread(() -> {
             try {
-                resultHolder[0] = pattern.matcher(input).replaceAll(Matcher.quoteReplacement(replacement));
+                // Don't use quoteReplacement - filter.yml regex rules may contain
+                // backreferences like $0
+                resultHolder[0] = pattern.matcher(input).replaceAll(replacement);
             } catch (Exception ignored) {
             }
         });
@@ -608,8 +610,6 @@ public class ChatHandler {
 
     public void runProxyJoinMessage(String playerName, UUID playerUUID, String serverName,
             BiConsumer<String, Permission> minecraftLogger) {
-        String configString = config.get(ConfigKey.MINECRAFT_JOIN).asString();
-        String discordConfigString = config.get(ConfigKey.DISCORD_JOIN_MESSAGE).asString();
 
         String aliasedServerName = Helper.convertAlias(config, serverName);
         String timeString = messageFormatter.getTimeString();
@@ -620,6 +620,19 @@ public class ChatHandler {
                 .withServer(aliasedServerName, serverName)
                 .withTime(timeString)
                 .withPluginPrefix();
+
+        // Check for first-time join FIRST - if it's a first join, only send first-join
+        // messages
+        boolean isFirstJoin = plugin.getFirstJoinTracker().isFirstJoin(playerUUID);
+
+        if (isFirstJoin) {
+            sendFirstJoinAnnouncement(playerName, playerUUID, aliasedServerName, serverName, builder, minecraftLogger);
+            return; // Don't send regular join message for first-time players
+        }
+
+        // Regular join message (only for non-first-time players)
+        String configString = config.get(ConfigKey.MINECRAFT_JOIN).asString();
+        String discordConfigString = config.get(ConfigKey.DISCORD_JOIN_MESSAGE).asString();
 
         String message = replacePrefixSuffix(builder.apply(configString), playerUUID, aliasedServerName, serverName);
         String discordMessage = replacePrefixSuffix(builder.apply(discordConfigString), playerUUID, aliasedServerName,
@@ -648,11 +661,6 @@ public class ChatHandler {
         if (config.get(ConfigKey.MINECRAFT_JOIN_ENABLED).asBoolean()
                 && config.get(ConfigKey.MINECRAFT_JOIN_PROXY_SEND).asBoolean()) {
             minecraftLogger.accept(message, Permission.READ_JOIN_MESSAGE);
-        }
-
-        // Check for first-time join and send special announcement
-        if (plugin.getFirstJoinTracker().isFirstJoin(playerUUID)) {
-            sendFirstJoinAnnouncement(playerName, playerUUID, aliasedServerName, serverName, builder, minecraftLogger);
         }
     }
 

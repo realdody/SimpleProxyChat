@@ -6,132 +6,132 @@
 # ==========================================================
 
 # Prefix for the plugin. %plugin-prefix% usable anywhere.
-plugin-prefix: "&8[<bold><rainbow>SimpleProxyChat&r&8]"
+plugin-prefix: '&8[<bold><rainbow>SimpleProxyChat&r&8]'
 
 # Minecraft Stuff
 minecraft:
   join:
     enabled: true
     proxy-send: true
-    message: "&e%player% &ahas joined the network. (%server%)"
+    message: '&e%player% &ahas joined the network. (%server%)'
     first-time:
       enabled: true
-      message: "&6&l★ &eWelcome &b%player% &eto the server for the first time! &6&l★"
+      message: '&e%player% &ahas joined the network for the first time. (%server%)'
     recipients:
       exclude-self: false
       exclude-server: false # excludes every player but the sender
   leave:
     enabled: true
     proxy-send: true
-    message: "&e%player% &chas left the network. (%server%)"
+    message: '&e%player% &chas left the network. (%server%)'
     recipients:
       exclude-self: false
       exclude-server: false # excludes every player but the sender
   chat:
     enabled: true
-    message: "&8[&3%server%&8] &e%player% &9» &7%message%"
-    vanished: "&cYou cannot send proxy messages while vanished. Your message must end with a '&e/&c' to speak."
+    message: '&8[&3%server%&8] &e%player% &9» &7%message%'
+    vanished: '&cYou cannot send proxy messages while vanished. Your message must end with a ''&e/&c'' to speak.'
   death:
     # YepLib: Minecraft death message template
     proxy-send: true
-    message: "<gray>[<red>Death</red>]</gray> <yellow>%player%</yellow> <gray>»</gray> %death_message%"
+    message: <gray>[<red>Death</red>]</gray> <yellow>%player%</yellow> <gray>»</gray> %death_message%
   advancement:
     # YepLib: Minecraft advancement message template
     # Placeholders: %player%, %title%, %description%, %advancement_type%, %server%
     proxy-send: true
-    message: "<gray>[<green>Advancement</green>%advancement_type%]</gray> <yellow>%player%</yellow> <gray>»</gray> %title% - %description%"
+    message: <gray>[<green>Advancement</green>%advancement_type%]</gray> <yellow>%player%</yellow> <gray>»</gray> %title% - %description%
   switch:
     enabled: true
     proxy-send: true
-    default: "&e%player% &7moved from &c%from% &7to &a%to%&7."
-    no-from: "&e%player% &7moved &7to &a%to%&7."
+    default: '&e%player% &7moved from &c%from% &7to &a%to%&7.'
+    no-from: '&e%player% &7moved &7to &a%to%&7.'
   whisper:
-    send: "&8[&dyou&8] &f⇒ &8[&d%receiver%&8] &9» &e%message%"
-    receive: "&8[&d%sender%&8] &f⇒ &8[&dyou&8] &9» &e%message%"
-    error: "&c/spc-whisper (user) (message)"
+    send: '&8[&dyou&8] &f⇒ &8[&d%receiver%&8] &9» &e%message%'
+    receive: '&8[&d%sender%&8] &f⇒ &8[&dyou&8] &9» &e%message%'
+    error: '&c/spc-whisper (user) (message)'
   discord:
     enabled: true
     # Select how Minecraft->Discord chat messages are sent.
     # Options: plain, embed, webhook
-    mode: plain
-    message: "%message%"
+    mode: webhook
+    message: '%message%'
     webhook:
       # Username to display for webhook messages. Supports %player%, %escaped_player%, %server%, %original_server%.
       # Default is %player% (player name). To post per-server, set this to "%server%".
-      username-format: "%player%"
+      username-format: '%player% ~ [%original_server%]'
       # Avatar URL template. Supports {uuid}, {uuid-nodashes}, {username}.
-      avatar-url: "https://crafthead.net/avatar/{uuid}"
+      avatar-url: https://vzge.me/head/128/{uuid}.png?no=shadow&y=70
       # If false (recommended), prevent all mentions (no @everyone/@here/user mentions).
       allowed-mentions: false
     embed:
       # DEPRECATED: prefer minecraft.discord.mode: "embed". This flag is ignored when mode is used.
       use: false
-      title: "[%server%] %player%"
-      message: "%message%"
-      color: "#FFC0CB"
-      use-timestamp: true
+      title: '[%server%] %player%'
+      message: '%message%'
+      color: '#FFC0CB'
+      use-timestamp: false
   command:
-    no-permission: "%plugin-prefix% &cSorry, you do not have permission to run this command."
-    unknown: "%plugin-prefix% &cUnknown command."
-    must-be-player: "%plugin-prefix% &cYou must be a player to run this command."
-    reload: "%plugin-prefix% &aThe plugin has been successfully reloaded!"
+    no-permission: '%plugin-prefix% &cSorry, you do not have permission to run this command.'
+    unknown: '%plugin-prefix% &cUnknown command.'
+    must-be-player: '%plugin-prefix% &cYou must be a player to run this command.'
+    reload: '%plugin-prefix% &aThe plugin has been successfully reloaded!'
     chat-lock:
-      usage: "%plugin-prefix% &cCorrect usage is &a/spc-chat all lock/unlock &c or &a/spc-chat lock/unlock"
+      usage: '%plugin-prefix% &cCorrect usage is &a/spc-chat all lock/unlock &c or &a/spc-chat lock/unlock'
       single:
-        locked: "%plugin-prefix% &6%server% &cwill no longer send proxy chat messages."
-        unlocked: "%plugin-prefix% &6%server% &awill now send proxy chat messages."
+        locked: '%plugin-prefix% &6%server% &cwill no longer send proxy chat messages.'
+        unlocked: '%plugin-prefix% &6%server% &awill now send proxy chat messages.'
       all:
-        locked: "%plugin-prefix% &cAll servers will no longer send proxy chat messages."
-        unlocked: "%plugin-prefix% &aAll servers will now send proxy chat messages."
+        locked: '%plugin-prefix% &cAll servers will no longer send proxy chat messages.'
+        unlocked: '%plugin-prefix% &aAll servers will now send proxy chat messages.'
     proxy-ban:
-      usage: "%plugin-prefix% &c/(un)ban (player)"
-      banned: "%plugin-prefix% &c%player% &7has been banned."
-      unbanned: "%plugin-prefix% &c%player% &7has been unbanned."
-      login-message: "&cYou have been banned from the proxy."
+      usage: '%plugin-prefix% &c/(un)ban (player)'
+      banned: '%plugin-prefix% &c%player% &7has been banned.'
+      unbanned: '%plugin-prefix% &c%player% &7has been unbanned.'
+      login-message: '&cYou have been banned from the proxy.'
     broadcast:
-      usage: "%plugin-prefix% &c/spc-broadcast (message)"
-      message: "%plugin-prefix% &8[&a&lBROADCAST&r&8] &6%message%"
+      usage: '%plugin-prefix% &c/spc-broadcast (message)'
+      message: '%plugin-prefix% &8[&a&lBROADCAST&r&8] &6%message%'
 
 # Discord Stuff
 discord:
   join:
     enabled: true
-    message: "%player% has joined the network. (%server%)"
-    use-timestamp: true
+    message: '%player% has joined the network. (%server%)'
+    use-timestamp: false
     # Incompatible with use-timestamp.
     use-embed: true
     first-time:
       enabled: true
-      message: "🎉 Welcome **%player%** to the server for the first time!"
+      message: Welcome %player% to the server for the first time!
   leave:
     enabled: true
-    message: "%player% has left the network. (%server%)"
-    use-timestamp: true
+    message: '%player% has left the network. (%server%)'
+    use-timestamp: false
     # Incompatible with use-timestamp.
     use-embed: true
   switch:
     enabled: true
-    message: "%player% has switched from %from% to %to%."
-    use-timestamp: true
+    message: '%player% has switched from %from% to %to%.'
+    use-timestamp: false
     # Incompatible with use-timestamp.
     use-embed: true
   chat:
     enabled: true
     # Placeholders: %role%, %user% (username), %nick% (nickname), %display_name% (display name), %message%, %discord-tag%
-    minecraft-message: "&8&b%discord-tag%&8 %role% &f%display_name% &9» &7%message%"
+    minecraft-message: '&8&b%discord-tag%&8 %role% &f%display_name% &9» &7%message%'
   events:
     webhook:
-      username-format: "%server%"
+      username-format: '%server%'
   death:
     # YepLib: Discord death message templates
-    message: "[Death] %player% » %death_message%"
+    message: '[Death] %player% » %death_message%'
     webhook:
       # When true, send death messages via the events webhook (webhook.events-url)
       send: true
     embed:
-      title: ""
-      description: "**%player% » %death_message%**"
-      use-timestamp: true
+      title: ''
+      description: '**%death_message%**'
+      use-timestamp: false
       # Controls for using the author row and its icon in death embeds
       # When true, shows an author row. Text comes from author-text (if set).
       use-author: true
@@ -139,20 +139,20 @@ discord:
       use-author-icon: true
       # Optional explicit author text. Supports placeholders: %player%, %death_message%, %server%, %original_server%.
       # When blank and use-author is true, a zero-width space is used so the icon can render (icon-only author row).
-      author-text: ""
+      author-text: ''
       # Optional author icon URL template. Supports {uuid}, {uuid-nodashes}, {username}. When blank, uses player head.
-      author-icon-url: ""
+      author-icon-url: ''
   advancement:
     # YepLib: Discord advancement message templates
     # Placeholders: %player%, %title%, %description%, %advancement_type%, %server%
-    message: "[Advancement] %player% » %title% - %description%"
+    message: '[Advancement] %player% » %title% - %description%'
     webhook:
       # When true, send advancement messages via the events webhook (webhook.events-url)
       send: true
     embed:
-      title: ""
-      description: "**%player%** has made the advancement **%title%**. _%description%_"
-      use-timestamp: true
+      title: ''
+      description: '**%player%** has made the advancement **%title%**. _%description%_'
+      use-timestamp: false
       # Controls for using the author row and its icon in advancement embeds
       # Disabled by default to preserve existing appearance.
       use-author: false
@@ -160,40 +160,40 @@ discord:
       use-author-icon: true
       # Optional explicit author text. Supports placeholders: %player%, %title%, %description%, %server%, %original_server%.
       # When blank and use-author is true, a zero-width space is used so the icon can render (icon-only author row).
-      author-text: ""
+      author-text: ''
       # Optional author icon URL template. Supports {uuid}, {uuid-nodashes}, {username}. When blank, uses player head.
-      author-icon-url: ""
+      author-icon-url: ''
   command:
     list:
       enabled: true
       allowed-roles: []
       ephemeral: true
-      header: "Online (%total%):"
-      per-server: "**%server%** (%count%): %players%"
-      none: "No players online."
+      header: 'Online (%total%):'
+      per-server: '**%server%** (%count%): %players%'
+      none: No players online.
       # Advanced formatting (optional). When server-format is set, these are used; header/per-server/none are ignored.
       # Placeholders:
       #   server-format: %server_name%, %online_players%, %max_players%
       #   player-format: %username%
       #   no-players-format: (no placeholders)
       #   server-offline-format: (no placeholders)
-      codeblock-lang: "asciidoc"
-      server-format: "[%server_name% %online_players%/%max_players%]"
-      player-format: "- %username%"
-      no-players-format: "No players online"
-      server-offline-format: "Server offline"
+      codeblock-lang: asciidoc
+      server-format: '[%server_name% %online_players%/%max_players%]'
+      player-format: '- %username%'
+      no-players-format: No players online
+      server-offline-format: Server offline
   topic:
-    online: "There are %online% players online."
-    offline: "The proxy is offline."
+    online: There are %online% players online.
+    offline: The proxy is offline.
   proxy-status:
     enabled: true
     messages:
-      enabled: "✅ Proxy enabled!"
-      disabled: "⛔ Proxy disabled."
-      title: "Server Status"
-      message: "Status: "
-      online: "Online ✅"
-      offline: "Offline ⛔"
+      enabled: ✅ Proxy enabled!
+      disabled: ⛔ Proxy disabled.
+      title: Server Status
+      message: 'Status: '
+      online: Online ✅
+      offline: Offline ⛔
       use-timestamp: true
 
 # Console Stuff - Uses Minecraft Messages
@@ -207,8 +207,7 @@ console:
 
 # The message for any updates that are sent.
 # The plugin-prefix is automatically appended to the beginning of this message.
-update-message: "&7There is an update! You are on &c%old%. New version is &a%new%&7: &6%link%"
+update-message: '&7There is an update! You are on &c%old%. New version is &a%new%&7: &6%link%'
 
 # DO NOT TOUCH THIS
 file-version: 20
-

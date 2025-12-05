@@ -16,7 +16,7 @@ minecraft:
     message: "&e%player% &ahas joined the network. (%server%)"
     first-time:
       enabled: true
-      message: "&6&l★ &eWelcome &b%player% &eto the server for the first time! &6&l★"
+      message: "&e%player% &ahas joined the network for the first time. (%server%)"
     recipients:
       exclude-self: false
       exclude-server: false # excludes every player but the sender
@@ -102,7 +102,7 @@ discord:
     use-embed: true
     first-time:
       enabled: true
-      message: "🎉 Welcome **%player%** to the server for the first time!"
+      message: "%player% has joined our network for the first time!"
   leave:
     enabled: true
     message: "%player% has left the network. (%server%)"
