@@ -144,10 +144,23 @@ commands:
   broadcast-aliases:
     - "spc-bc"
     - "broadcast"
+  link-aliases:
+    - "link"
+    - "accountlink"
+  unlink-aliases:
+    - "unlink"
 
 # Disable servers from sending/receiving proxy messages.
 disabled-servers:
   - example1
 
+# Account linking configuration (Discord-Minecraft linking via external API)
+# When enabled, players can use /link to link their Minecraft account to Discord.
+linking:
+  enabled: false
+  api-url: "https://api.yourserver.com"
+  api-key: ""
+
 # DO NOT TOUCH THIS
-file-version: 21
+file-version: 22
+

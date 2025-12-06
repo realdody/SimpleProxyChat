@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 
 @RequiredArgsConstructor
+@SuppressWarnings("unchecked")
 public class ConfigValueWrapper {
 
     private final Object value;

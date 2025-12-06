@@ -2,11 +2,14 @@ package com.beanbeanjuice.simpleproxychat;
 
 import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityBroadcastCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityChatToggleCommand;
+import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityLinkCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityReloadCommand;
+import com.beanbeanjuice.simpleproxychat.commands.velocity.VelocityUnlinkCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.whisper.VelocityReplyCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.whisper.VelocityWhisperCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.ban.VelocityBanCommand;
 import com.beanbeanjuice.simpleproxychat.commands.velocity.ban.VelocityUnbanCommand;
+import com.beanbeanjuice.simpleproxychat.linking.LinkApiClient;
 import com.beanbeanjuice.simpleproxychat.socket.velocity.VelocityPluginMessagingListener;
 import com.beanbeanjuice.simpleproxychat.socket.velocity.YepLibListener;
 import com.beanbeanjuice.simpleproxychat.utility.BanHelper;
@@ -14,7 +17,6 @@ import com.beanbeanjuice.simpleproxychat.utility.ISimpleProxyChat;
 import com.beanbeanjuice.simpleproxychat.utility.UpdateChecker;
 import com.beanbeanjuice.simpleproxychat.utility.helper.WhisperHandler;
 import com.beanbeanjuice.simpleproxychat.utility.config.Permission;
-import com.beanbeanjuice.simpleproxychat.utility.epoch.EpochHelper;
 import com.beanbeanjuice.simpleproxychat.utility.status.ServerStatusManager;
 import com.google.inject.Inject;
 import com.beanbeanjuice.simpleproxychat.chat.ChatHandler;
@@ -56,31 +58,44 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
 
     private final Metrics.Factory metricsFactory;
 
-    @Getter private boolean pluginStarting = true;
+    @Getter
+    private boolean pluginStarting = true;
 
-    @Getter private final ProxyServer proxyServer;
-    @Getter private final Logger logger;
-    @Getter private final Config config;
-    @Getter private Bot discordBot;
-    @Getter private WhisperHandler whisperHandler;
-    @Getter private BanHelper banHelper;
+    @Getter
+    private final ProxyServer proxyServer;
+    @Getter
+    private final Logger logger;
+    @Getter
+    private final Config config;
+    @Getter
+    private Bot discordBot;
+    @Getter
+    private WhisperHandler whisperHandler;
+    @Getter
+    private BanHelper banHelper;
     private Metrics metrics;
-    @Getter private VelocityServerListener serverListener;
-    @Getter private FirstJoinTracker firstJoinTracker;
+    @Getter
+    private VelocityServerListener serverListener;
+    @Getter
+    private FirstJoinTracker firstJoinTracker;
 
     private PluginManager pluginManager;
 
     private final File dataDirectory;
 
+    private LinkApiClient linkApiClient;
+
     @Inject
-    public SimpleProxyChatVelocity(ProxyServer proxyServer, Logger logger, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactory) {
+    public SimpleProxyChatVelocity(ProxyServer proxyServer, Logger logger, @DataDirectory Path dataDirectory,
+            Metrics.Factory metricsFactory) {
         this.proxyServer = proxyServer;
         this.logger = logger;
         this.metricsFactory = metricsFactory;
 
         this.getLogger().info("The plugin is starting.");
         this.dataDirectory = dataDirectory.toFile();
-        // Initialize PluginManager immediately to avoid NPEs during early async tasks (e.g., Discord bot start)
+        // Initialize PluginManager immediately to avoid NPEs during early async tasks
+        // (e.g., Discord bot start)
         this.pluginManager = this.proxyServer.getPluginManager();
         this.config = new Config(dataDirectory.toFile());
         this.config.initialize();
@@ -90,6 +105,7 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
         this.getLogger().info("Plugin has been initialized.");
     }
 
+    @SuppressWarnings("deprecation")
     @Subscribe(order = PostOrder.LAST)
     public void onProxyInitialization(ProxyInitializeEvent event) {
         // Initialize discord bot.
@@ -98,8 +114,11 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
 
         // Bot ready.
         this.proxyServer.getScheduler().buildTask(this, () -> {
-            try { discordBot.start(); }
-            catch (Exception e) { this.getLogger().warn("There was an error starting the discord bot: {}", e.getMessage()); }
+            try {
+                discordBot.start();
+            } catch (Exception e) {
+                this.getLogger().warn("There was an error starting the discord bot: {}", e.getMessage());
+            }
         }).schedule();
 
         hookPlugins();
@@ -126,20 +145,22 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
                         });
                         return map;
                     },
-                    this::getMaxPlayers
-            ));
+                    this::getMaxPlayers));
             // Ensure the command exists on the guild owning the configured channel
             discordBot.getBotTextChannel().ifPresent(tc -> {
                 tc.getGuild().upsertCommand("list", "List online players across servers").queue();
             });
         }));
 
-        // Once the bot is ready, add Discord username chat completions to all currently online players
+        // Once the bot is ready, add Discord username chat completions to all currently
+        // online players
         discordBot.addRunnableToQueue(() -> proxyServer.getAllPlayers().forEach(discordBot::sendChatCompletions));
 
         // Start Channel Topic Updater
-        this.proxyServer.getScheduler().buildTask(this, discordBot::channelUpdaterFunction).delay(1, TimeUnit.MINUTES).repeat(10, TimeUnit.MINUTES).schedule();
-        this.proxyServer.getScheduler().buildTask(this, discordBot::updateActivity).delay(6, TimeUnit.MINUTES).repeat(6, TimeUnit.MINUTES).schedule();
+        this.proxyServer.getScheduler().buildTask(this, discordBot::channelUpdaterFunction).delay(1, TimeUnit.MINUTES)
+                .repeat(10, TimeUnit.MINUTES).schedule();
+        this.proxyServer.getScheduler().buildTask(this, discordBot::updateActivity).delay(6, TimeUnit.MINUTES)
+                .repeat(6, TimeUnit.MINUTES).schedule();
 
         // Start Update Checker
         startUpdateChecker();
@@ -159,12 +180,14 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
                 ServerStatusManager manager = serverListener.getServerStatusManager();
                 manager.getAllStatusStrings().stream().map(Helper::sanitize).forEach(this.getLogger()::info);
 
-                if (!config.get(ConfigKey.USE_INITIAL_SERVER_STATUS).asBoolean()) return;
-                if (!config.get(ConfigKey.DISCORD_PROXY_STATUS_ENABLED).asBoolean()) return;
+                if (!config.get(ConfigKey.USE_INITIAL_SERVER_STATUS).asBoolean())
+                    return;
+                if (!config.get(ConfigKey.DISCORD_PROXY_STATUS_ENABLED).asBoolean())
+                    return;
                 discordBot.sendMessageEmbed(manager.getAllStatusEmbed());
             })
-            .delay(config.get(ConfigKey.SERVER_UPDATE_INTERVAL).asInt() * 2L, TimeUnit.SECONDS)
-            .schedule();
+                    .delay(config.get(ConfigKey.SERVER_UPDATE_INTERVAL).asInt() * 2L, TimeUnit.SECONDS)
+                    .schedule();
         });
     }
 
@@ -177,14 +200,16 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
                 config,
                 currentVersion,
                 (message) -> {
-                    if (!config.get(ConfigKey.UPDATE_NOTIFICATIONS).asBoolean()) return;
+                    if (!config.get(ConfigKey.UPDATE_NOTIFICATIONS).asBoolean())
+                        return;
                     this.getLogger().info(Helper.sanitize(message));
                     this.proxyServer.getAllPlayers()
                             .stream()
-                            .filter((player) -> player.hasPermission(Permission.READ_UPDATE_NOTIFICATION.getPermissionNode()))
-                            .forEach((player) -> player.sendMessage(Helper.stringToComponent(config.get(ConfigKey.PLUGIN_PREFIX).asString() + message)));
-                }
-        );
+                            .filter((player) -> player
+                                    .hasPermission(Permission.READ_UPDATE_NOTIFICATION.getPermissionNode()))
+                            .forEach((player) -> player.sendMessage(Helper
+                                    .stringToComponent(config.get(ConfigKey.PLUGIN_PREFIX).asString() + message)));
+                });
 
         this.proxyServer.getScheduler().buildTask(this, updateChecker::checkUpdate)
                 .delay(0, TimeUnit.MINUTES)
@@ -221,8 +246,10 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
         }
 
         // Registering the Simple Banning System
-        if (!this.isLiteBansEnabled() && !this.isAdvancedBanEnabled() && config.get(ConfigKey.USE_SIMPLE_PROXY_CHAT_BANNING_SYSTEM).asBoolean()) {
-            getLogger().info("LiteBans and AdvancedBan not found. Using the built-in banning system for SimpleProxyChat...");
+        if (!this.isLiteBansEnabled() && !this.isAdvancedBanEnabled()
+                && config.get(ConfigKey.USE_SIMPLE_PROXY_CHAT_BANNING_SYSTEM).asBoolean()) {
+            getLogger().info(
+                    "LiteBans and AdvancedBan not found. Using the built-in banning system for SimpleProxyChat...");
             banHelper = new BanHelper(dataDirectory);
             banHelper.initialize();
         } else {
@@ -240,7 +267,8 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
         this.proxyServer.getEventManager().register(this, new VelocityPluginMessagingListener(this, serverListener));
         this.proxyServer.getChannelRegistrar().register(VelocityPluginMessagingListener.IDENTIFIER);
 
-        // Conditionally register YepLib integration (Velocity-only) if present at runtime.
+        // Conditionally register YepLib integration (Velocity-only) if present at
+        // runtime.
         try {
             if (this.proxyServer.getPluginManager().getPlugin("yeplib").isPresent()) {
                 this.getLogger().info("YepLib detected; enabling YepLib integration.");
@@ -249,7 +277,8 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
                 this.getLogger().info("YepLib not detected; skipping YepLib integration.");
             }
         } catch (Throwable t) {
-            // Extra safety: if classes are missing or anything fails, do not impact normal operation.
+            // Extra safety: if classes are missing or anything fails, do not impact normal
+            // operation.
             this.getLogger().warn("YepLib was detected but integration failed to initialize: {}", t.toString());
         }
 
@@ -304,6 +333,25 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
             commandManager.register(banCommand, new VelocityBanCommand(this));
             commandManager.register(unbanCommand, new VelocityUnbanCommand(this));
         }
+
+        // Register link/unlink commands if linking is enabled.
+        if (config.get(ConfigKey.LINKING_ENABLED).asBoolean()) {
+            linkApiClient = new LinkApiClient(config, logger);
+
+            CommandMeta linkCommand = commandManager.metaBuilder("spc-link")
+                    .aliases(config.get(ConfigKey.LINK_ALIASES).asList().toArray(new String[0]))
+                    .plugin(this)
+                    .build();
+
+            CommandMeta unlinkCommand = commandManager.metaBuilder("spc-unlink")
+                    .aliases(config.get(ConfigKey.UNLINK_ALIASES).asList().toArray(new String[0]))
+                    .plugin(this)
+                    .build();
+
+            commandManager.register(linkCommand, new VelocityLinkCommand(this, linkApiClient));
+            commandManager.register(unlinkCommand, new VelocityUnlinkCommand(this, linkApiClient));
+            this.getLogger().info("Account linking commands registered.");
+        }
     }
 
     private int getOnlinePlayers() {
@@ -326,14 +374,15 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
                 .filter(p -> p.getCurrentServer().isPresent())
                 .collect(Collectors.groupingBy(
                         p -> p.getCurrentServer().get().getServerInfo().getName(),
-                        Collectors.mapping(p -> p.getUsername(), Collectors.toList())
-                ));
+                        Collectors.mapping(p -> p.getUsername(), Collectors.toList())));
     }
 
+    @SuppressWarnings("deprecation")
     @Subscribe(order = PostOrder.LAST)
     public void onProxyShutdown(ProxyShutdownEvent event) {
         this.getLogger().info("The plugin is shutting down...");
-        if (discordBot != null) discordBot.stop();
+        if (discordBot != null)
+            discordBot.stop();
     }
 
     @Override
@@ -343,14 +392,16 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
 
     @Override
     public Optional<?> getLuckPerms() {
-        if (!this.isLuckPermsEnabled()) return Optional.empty();
+        if (!this.isLuckPermsEnabled())
+            return Optional.empty();
 
         return Optional.of(LuckPermsProvider.get());
     }
 
     @Override
     public boolean isVanishAPIEnabled() {
-        return (pluginManager.getPlugin("premiumvanish").isPresent() || pluginManager.getPlugin("supervanish").isPresent());
+        return (pluginManager.getPlugin("premiumvanish").isPresent()
+                || pluginManager.getPlugin("supervanish").isPresent());
     }
 
     @Override
@@ -360,7 +411,8 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
 
     @Override
     public Optional<?> getLiteBansDatabase() {
-        if (!this.isLiteBansEnabled()) return Optional.empty();
+        if (!this.isLiteBansEnabled())
+            return Optional.empty();
 
         return Optional.ofNullable(Database.get());
     }
@@ -372,14 +424,16 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
 
     @Override
     public Optional<?> getAdvancedBanUUIDManager() {
-        if (!this.isAdvancedBanEnabled()) return Optional.empty();
+        if (!this.isAdvancedBanEnabled())
+            return Optional.empty();
 
         return Optional.of(UUIDManager.get());
     }
 
     @Override
     public Optional<?> getAdvancedBanPunishmentManager() {
-        if (!this.isAdvancedBanEnabled()) return Optional.empty();
+        if (!this.isAdvancedBanEnabled())
+            return Optional.empty();
 
         return Optional.of(PunishmentManager.get());
     }
@@ -391,7 +445,8 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
 
     @Override
     public Optional<?> getNetworkManager() {
-        if (!this.isNetworkManagerEnabled()) return Optional.empty();
+        if (!this.isNetworkManagerEnabled())
+            return Optional.empty();
 
         return Optional.of(NetworkManagerProvider.Companion.get());
     }

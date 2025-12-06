@@ -61,6 +61,7 @@ public class VelocityServerListener {
         return plugin.getSPCConfig().get(ConfigKey.DISABLED_SERVERS).asList().contains(serverInfo.getName());
     }
 
+    @SuppressWarnings("deprecation")
     @Subscribe(order = PostOrder.LAST)
     public void onPlayerChat(PlayerChatEvent event) {
         if (playerIsInDisabledServer(event.getPlayer(), plugin))

@@ -91,6 +91,31 @@ minecraft:
     broadcast:
       usage: '%plugin-prefix% &c/spc-broadcast (message)'
       message: '%plugin-prefix% &8[&a&lBROADCAST&r&8] &6%message%'
+    link:
+      generating: '%plugin-prefix% &e⏳ Generating link code...'
+      success-header: '&8━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+      success-title: '  &6&l🔗 Account Link Code'
+      success-code: '  &7Your link code: &a&l%code%'
+      success-steps: '  &e📱 Steps to complete:'
+      success-step1: '    &71. Go to: &b%url%'
+      success-step2: '    &72. Log in with Discord'
+      success-step3: '    &73. Enter your code: &a%code%'
+      success-expires: '  &c⏱ Code expires in 15 minutes'
+      success-footer: '&8━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+      error: '%plugin-prefix% &c❌ Failed: %error%'
+      already-linked-header: '&8━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+      already-linked-title: '  &6&l🔗 Account already linked'
+      already-linked-prompt: '  &eWhat would you like to do?'
+    unlink:
+      confirm-header: '&8━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+      confirm-title: '  &6&l⚠ Confirm Unlink'
+      confirm-text: '  &7This will remove the link between your Discord and Minecraft account.'
+      confirm-prompt: '  &eAre you sure?'
+      unlinking: '%plugin-prefix% &e⏳ Unlinking your account...'
+      success: '%plugin-prefix% &a✅ Your account has been unlinked.'
+      success-hint: '&7You can relink any time using &b/link'
+      cancelled: '%plugin-prefix% &8❎ Unlink cancelled.'
+      error: '%plugin-prefix% &c❌ Failed to unlink. Please try again later.'
 
 # Discord Stuff
 discord:

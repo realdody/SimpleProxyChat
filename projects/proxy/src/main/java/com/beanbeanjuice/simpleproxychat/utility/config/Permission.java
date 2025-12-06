@@ -16,9 +16,12 @@ public enum Permission {
     COMMAND_BAN("simpleproxychat.ban"),
     COMMAND_UNBAN("simpleproxychat.unban"),
     COMMAND_WHISPER("simpleproxychat.whisper"),
-    COMMAND_BROADCAST("simpleproxychat.broadcast");
+    COMMAND_BROADCAST("simpleproxychat.broadcast"),
+    COMMAND_LINK("simpleproxychat.link"),
+    COMMAND_UNLINK("simpleproxychat.unlink");
 
-    @Getter private final String permissionNode;
+    @Getter
+    private final String permissionNode;
 
     Permission(String permissionNode) {
         this.permissionNode = permissionNode;

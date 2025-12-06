@@ -3,8 +3,8 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 version = project.property("version") as String
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 sourceSets {
@@ -87,6 +87,9 @@ dependencies {
     // Artifact Version Comparison
     // TODO: Eventually remove this.
     implementation("org.apache.maven", "maven-artifact", "3.9.11")
+
+    // HTTP Client for account linking API
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
 
 configure<ProcessResources>("processResources") {
@@ -110,6 +113,8 @@ tasks.withType<ShadowJar> {
     relocate("org.bstats", "com.beanbeanjuice.simpleproxychat.libs.org.bstats")
     relocate("joda-time", "com.beanbeanjuice.simpleproxychat.libs.joda-time")  // check
     relocate("org.apache.maven", "com.beanbeanjuice.simpleproxychat.libs.org.apache.maven")  // check
+    relocate("okhttp3", "com.beanbeanjuice.simpleproxychat.libs.okhttp3")
+    relocate("okio", "com.beanbeanjuice.simpleproxychat.libs.okio")
     // merge SPI service files for libraries that rely on them
     mergeServiceFiles()
 }

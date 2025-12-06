@@ -21,7 +21,7 @@ import java.util.logging.Logger;
  * Handles loading and reloading of config.yml, messages.yml, and filter.yml.
  */
 public class Config {
-    
+
     private static final Logger LOGGER = Logger.getLogger(Config.class.getName());
 
     private YamlDocument yamlConfig;
@@ -31,8 +31,10 @@ public class Config {
     private final Map<ConfigKey, ConfigValue<?>> configCache;
     private final List<Runnable> reloadListeners;
 
-    @Getter private final FilterConfig filterConfig;
-    @Getter private final ServerChatLockHelper serverChatLockHelper;
+    @Getter
+    private final FilterConfig filterConfig;
+    @Getter
+    private final ServerChatLockHelper serverChatLockHelper;
 
     public Config(File configFolder) {
         this.configFolder = configFolder;
@@ -50,15 +52,15 @@ public class Config {
             yamlConfig = loadConfigFile("config.yml");
             yamlMessages = loadConfigFile("messages.yml");
             yamlFilter = loadConfigFile("filter.yml");
-            
+
             // Update and save files to ensure they're up-to-date
             updateAndSave(yamlConfig);
             updateAndSave(yamlMessages);
             updateAndSave(yamlFilter);
-            
+
             // Load configuration values
             loadAllConfigs();
-            
+
             LOGGER.info("Configuration loaded successfully");
         } catch (IOException e) {
             LOGGER.severe("Failed to initialize configuration: " + e.getMessage());
@@ -68,6 +70,7 @@ public class Config {
 
     /**
      * Adds a listener to be notified when configuration is reloaded.
+     * 
      * @param listener The listener to add
      */
     public void addReloadListener(Runnable listener) {
@@ -82,11 +85,11 @@ public class Config {
             yamlConfig.reload();
             yamlMessages.reload();
             yamlFilter.reload();
-            
+
             loadAllConfigs();
-            
+
             reloadListeners.forEach(Runnable::run);
-            
+
             LOGGER.info("Configuration reloaded successfully");
         } catch (IOException e) {
             LOGGER.severe("Failed to reload configuration: " + e.getMessage());
@@ -96,8 +99,10 @@ public class Config {
 
     /**
      * Gets a configuration value by key.
+     * 
      * @param key The configuration key
-     * @return The configuration value wrapper (never null, but may contain null value)
+     * @return The configuration value wrapper (never null, but may contain null
+     *         value)
      */
     public ConfigValueWrapper get(ConfigKey key) {
         ConfigValue<?> value = configCache.get(key);
@@ -116,7 +121,7 @@ public class Config {
         loadMainConfigs();
         filterConfig.load(yamlFilter);
     }
-    
+
     /**
      * Loads config.yml and messages.yml values using the ConfigLoader utility.
      */
@@ -125,7 +130,7 @@ public class Config {
             YamlDocument document = (key.getFile() == ConfigFileType.CONFIG) ? yamlConfig : yamlMessages;
             String path = key.getKey();
             Class<?> type = key.getClassType();
-            
+
             ConfigValue<?> value = ConfigLoader.loadValue(document, path, type);
             configCache.put(key, value);
         });
@@ -133,14 +138,15 @@ public class Config {
 
     /**
      * Overwrites a configuration value in the cache (runtime only, not persisted).
-     * @param key The configuration key
+     * 
+     * @param key   The configuration key
      * @param value The new value
      */
     @SuppressWarnings("unchecked")
     public void overwrite(ConfigKey key, Object value) {
         configCache.put(key, new ConfigValue(value, key.getClassType()));
     }
-    
+
     /**
      * Updates and saves a YAML document.
      */
@@ -150,7 +156,9 @@ public class Config {
     }
 
     /**
-     * Loads a configuration file from the config folder with versioning and auto-update.
+     * Loads a configuration file from the config folder with versioning and
+     * auto-update.
+     * 
      * @param fileName The name of the config file
      * @return The loaded YAML document
      * @throws IOException If file loading fails
@@ -175,21 +183,27 @@ public class Config {
                         .addRelocation("7", "discord.switch.use", "discord.switch.enabled", '.')
                         .addRelocation("7", "discord.minecraft-message", "discord.chat.minecraft-message", '.')
 
-                        .addRelocation("7", "discord.proxy-status.enabled", "discord.proxy-status.messages.enabled", '.')
-                        .addRelocation("7", "discord.proxy-status.disabled", "discord.proxy-status.messages.disabled", '.')
+                        .addRelocation("7", "discord.proxy-status.enabled", "discord.proxy-status.messages.enabled",
+                                '.')
+                        .addRelocation("7", "discord.proxy-status.disabled", "discord.proxy-status.messages.disabled",
+                                '.')
                         .addRelocation("7", "discord.proxy-status.title", "discord.proxy-status.messages.title", '.')
-                        .addRelocation("7", "discord.proxy-status.message", "discord.proxy-status.messages.message", '.')
+                        .addRelocation("7", "discord.proxy-status.message", "discord.proxy-status.messages.message",
+                                '.')
                         .addRelocation("7", "discord.proxy-status.online", "discord.proxy-status.messages.online", '.')
-                        .addRelocation("7", "discord.proxy-status.offline", "discord.proxy-status.messages.offline", '.')
-                        .addRelocation("7", "discord.proxy-status.use-timestamp", "discord.proxy-status.messages.use-timestamp", '.')
+                        .addRelocation("7", "discord.proxy-status.offline", "discord.proxy-status.messages.offline",
+                                '.')
+                        .addRelocation("7", "discord.proxy-status.use-timestamp",
+                                "discord.proxy-status.messages.use-timestamp", '.')
 
-                        .build()
-        );
+                        .build());
     }
 
     /**
      * Returns the alias for a server name for events webhook.
-     * Uses the simple 'aliases' mapping (server -> alias) with legacy nested fallback.
+     * Uses the simple 'aliases' mapping (server -> alias) with legacy nested
+     * fallback.
+     * 
      * @param serverName The server name to look up
      * @return The alias, or null if not found
      */
@@ -197,7 +211,7 @@ public class Config {
         if (yamlConfig == null || serverName == null || serverName.isBlank()) {
             return null;
         }
-        
+
         Section aliases = yamlConfig.getSection("aliases");
         if (aliases == null) {
             return null;
@@ -219,13 +233,15 @@ public class Config {
                 }
             }
         }
-        
+
         return null;
     }
 
     /**
      * Returns the avatar URL override for events webhook.
-     * Looks up in 'alias-avatars' map (alias -> avatarUrl) with legacy nested fallback.
+     * Looks up in 'alias-avatars' map (alias -> avatarUrl) with legacy nested
+     * fallback.
+     * 
      * @param serverName The server name to look up
      * @return The avatar URL, or null if not found
      */
@@ -261,37 +277,7 @@ public class Config {
                 }
             }
         }
-        
+
         return null;
     }
-    
-    // Deprecated methods for backward compatibility with filter access
-    
-    /** @deprecated Use {@link #getFilterConfig()} instead */
-    @Deprecated
-    public boolean isFilterEnabled() { return filterConfig.isEnabled(); }
-    
-    /** @deprecated Use {@link #getFilterConfig()} instead */
-    @Deprecated
-    public boolean isFilterCaseInsensitive() { return filterConfig.isCaseInsensitive(); }
-    
-    /** @deprecated Use {@link #getFilterConfig()} instead */
-    @Deprecated
-    public boolean isFilterWholeWord() { return filterConfig.isWholeWord(); }
-    
-    /** @deprecated Use {@link #getFilterConfig()} instead */
-    @Deprecated
-    public String getFilterDefaultReplacement() { return filterConfig.getDefaultReplacement(); }
-    
-    /** @deprecated Use {@link #getFilterConfig()} instead */
-    @Deprecated
-    public Map<String, String> getFilterReplacements() { return filterConfig.getReplacements(); }
-    
-    /** @deprecated Use {@link #getFilterConfig()} instead */
-    @Deprecated
-    public List<String> getFilterGlobalWords() { return filterConfig.getGlobalWords(); }
-    
-    /** @deprecated Use {@link #getFilterConfig()} instead */
-    @Deprecated
-    public List<FilterConfig.FilterRegexRule> getFilterRegexRules() { return filterConfig.getRegexRules(); }
 }

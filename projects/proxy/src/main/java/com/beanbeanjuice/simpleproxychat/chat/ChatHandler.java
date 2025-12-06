@@ -144,15 +144,16 @@ public class ChatHandler {
      */
     public void rebuildFilterCache() {
         List<CompiledFilterRule> newCache = new ArrayList<>();
+        FilterConfig filterConfig = config.getFilterConfig();
 
         Map<String, String> combined = new LinkedHashMap<>();
-        Map<String, String> specific = Optional.ofNullable(config.getFilterReplacements())
+        Map<String, String> specific = Optional.ofNullable(filterConfig.getReplacements())
                 .orElseGet(Collections::emptyMap);
         combined.putAll(specific);
-        List<String> globals = Optional.ofNullable(config.getFilterGlobalWords()).orElseGet(Collections::emptyList);
+        List<String> globals = Optional.ofNullable(filterConfig.getGlobalWords()).orElseGet(Collections::emptyList);
         for (String gw : globals) {
             if (!combined.containsKey(gw))
-                combined.put(gw, config.getFilterDefaultReplacement());
+                combined.put(gw, filterConfig.getDefaultReplacement());
         }
 
         if (combined.isEmpty()) {
@@ -161,7 +162,7 @@ public class ChatHandler {
         }
 
         int flags = 0;
-        if (config.isFilterCaseInsensitive())
+        if (filterConfig.isCaseInsensitive())
             flags |= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
 
         for (Map.Entry<String, String> e : combined.entrySet()) {
@@ -170,7 +171,7 @@ public class ChatHandler {
                 continue;
             String replacement = e.getValue() == null ? "" : e.getValue();
             String core = Pattern.quote(key);
-            String patternStr = config.isFilterWholeWord() ? "\\b" + core + "\\b" : core;
+            String patternStr = filterConfig.isWholeWord() ? "\\b" + core + "\\b" : core;
             try {
                 Pattern compiled = Pattern.compile(patternStr, flags);
                 newCache.add(new CompiledFilterRule(compiled, replacement));
@@ -533,7 +534,7 @@ public class ChatHandler {
 
     // Applies filtering to non-URL parts of the text
     private String applyFilter(String text) {
-        if (!config.isFilterEnabled() || text == null || text.isEmpty())
+        if (!config.getFilterConfig().isEnabled() || text == null || text.isEmpty())
             return text;
         Matcher m = URL_PATTERN.matcher(text);
         StringBuilder out = new StringBuilder();
