@@ -18,27 +18,27 @@ minecraft:
       enabled: true
       message: '&e%player% &ahas joined the network for the first time. (%server%)'
     recipients:
-      exclude-self: false
-      exclude-server: false # excludes every player but the sender
+      exclude-self: true
+      exclude-server: true # excludes every player but the sender
   leave:
     enabled: true
     proxy-send: true
     message: '&e%player% &chas left the network. (%server%)'
     recipients:
-      exclude-self: false
-      exclude-server: false # excludes every player but the sender
+      exclude-self: true
+      exclude-server: true # excludes every player but the sender
   chat:
     enabled: true
     message: '&8[&3%server%&8] &e%player% &9» &7%message%'
     vanished: '&cYou cannot send proxy messages while vanished. Your message must end with a ''&e/&c'' to speak.'
   death:
     # YepLib: Minecraft death message template
-    proxy-send: true
+    proxy-send: false
     message: <gray>[<red>Death</red>]</gray> <yellow>%player%</yellow> <gray>»</gray> %death_message%
   advancement:
     # YepLib: Minecraft advancement message template
     # Placeholders: %player%, %title%, %description%, %advancement_type%, %server%
-    proxy-send: true
+    proxy-send: false
     message: <gray>[<green>Advancement</green>%advancement_type%]</gray> <yellow>%player%</yellow> <gray>»</gray> %title% - %description%
   switch:
     enabled: true
@@ -58,7 +58,7 @@ minecraft:
     webhook:
       # Username to display for webhook messages. Supports %player%, %escaped_player%, %server%, %original_server%.
       # Default is %player% (player name). To post per-server, set this to "%server%".
-      username-format: '%player% ~ [%original_server%]'
+      username-format: '%player% ~ [%server%]'
       # Avatar URL template. Supports {uuid}, {uuid-nodashes}, {username}.
       avatar-url: https://vzge.me/head/128/{uuid}.png?no=shadow&y=70
       # If false (recommended), prevent all mentions (no @everyone/@here/user mentions).
@@ -127,7 +127,7 @@ discord:
     use-embed: true
     first-time:
       enabled: true
-      message: Welcome %player% to the network for the first time!
+      message: Welcome %player% to the network for the first time! (%server%)
   leave:
     enabled: true
     message: '%player% has left the network. (%server%)'
@@ -149,13 +149,13 @@ discord:
       username-format: '%server%'
   death:
     # YepLib: Discord death message templates
-    message: '[Death] %player% » %death_message%'
+    message: '%death_message%'
     webhook:
       # When true, send death messages via the events webhook (webhook.events-url)
       send: true
     embed:
       title: ''
-      description: '**%death_message%**'
+      description: ''
       use-timestamp: false
       # Controls for using the author row and its icon in death embeds
       # When true, shows an author row. Text comes from author-text (if set).
@@ -164,7 +164,7 @@ discord:
       use-author-icon: true
       # Optional explicit author text. Supports placeholders: %player%, %death_message%, %server%, %original_server%.
       # When blank and use-author is true, a zero-width space is used so the icon can render (icon-only author row).
-      author-text: ''
+      author-text: '%death_message%'
       # Optional author icon URL template. Supports {uuid}, {uuid-nodashes}, {username}. When blank, uses player head.
       author-icon-url: ''
   advancement:
@@ -176,16 +176,16 @@ discord:
       send: true
     embed:
       title: ''
-      description: '**%player%** has made the advancement **%title%**. _%description%_'
+      description: "**%title%** \t _%description%_"
       use-timestamp: false
       # Controls for using the author row and its icon in advancement embeds
       # Disabled by default to preserve existing appearance.
-      use-author: false
+      use-author: true
       # When true, shows the author icon. Defaults to player's head when author-icon-url is blank.
       use-author-icon: true
       # Optional explicit author text. Supports placeholders: %player%, %title%, %description%, %server%, %original_server%.
       # When blank and use-author is true, a zero-width space is used so the icon can render (icon-only author row).
-      author-text: ''
+      author-text: '%player% has made the advancement:'
       # Optional author icon URL template. Supports {uuid}, {uuid-nodashes}, {username}. When blank, uses player head.
       author-icon-url: ''
   command:
