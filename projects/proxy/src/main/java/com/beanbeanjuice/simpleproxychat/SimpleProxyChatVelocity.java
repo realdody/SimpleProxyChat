@@ -24,6 +24,7 @@ import com.beanbeanjuice.simpleproxychat.utility.listeners.velocity.VelocityServ
 import com.beanbeanjuice.simpleproxychat.discord.Bot;
 import com.beanbeanjuice.simpleproxychat.discord.DiscordSlashCommandHandler;
 import com.beanbeanjuice.simpleproxychat.utility.helper.Helper;
+import com.beanbeanjuice.simpleproxychat.utility.helper.LegacyMessageHelper;
 import com.beanbeanjuice.simpleproxychat.utility.helper.FirstJoinTracker;
 import com.beanbeanjuice.simpleproxychat.utility.config.Config;
 import com.beanbeanjuice.simpleproxychat.utility.config.ConfigKey;
@@ -460,7 +461,7 @@ public class SimpleProxyChatVelocity implements ISimpleProxyChat {
     public void sendAll(String message) {
         logger.info(Helper.sanitize(message));
         Component messageComponent = MiniMessage.miniMessage().deserialize(message);
-        proxyServer.getAllPlayers().forEach((player) -> player.sendMessage(messageComponent));
+        proxyServer.getAllPlayers().forEach((player) -> LegacyMessageHelper.sendSafeMessage(player, messageComponent));
     }
 
     @Override

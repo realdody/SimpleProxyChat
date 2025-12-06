@@ -8,6 +8,7 @@ import com.beanbeanjuice.simpleproxychat.utility.listeners.MessageType;
 import com.beanbeanjuice.simpleproxychat.utility.listeners.velocity.VelocityServerListener;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.beanbeanjuice.simpleproxychat.utility.helper.LegacyMessageHelper;
 import lombok.Getter;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -17,24 +18,25 @@ import java.util.Collection;
 public class VelocityChatMessageData extends ChatMessageData {
 
     private SimpleProxyChatVelocity plugin;
-    @Getter private final RegisteredServer server;
+    @Getter
+    private final RegisteredServer server;
 
     public VelocityChatMessageData(SimpleProxyChatVelocity plugin, MessageType type, RegisteredServer server,
-                                   Player player, String message) {
+            Player player, String message) {
         super(
                 type,
                 server.getServerInfo().getName(),
                 player.getUsername(),
                 player.getUniqueId(),
-                message
-        );
+                message);
         this.plugin = plugin;
         this.server = server;
     }
 
     public VelocityChatMessageData(SimpleProxyChatVelocity plugin, MessageType type, RegisteredServer server,
-                                 Player player, String message,
-                                 String parsedMinecraftString, String parsedDiscordString, String parsedDiscordEmbedTitle, String parsedDiscordEmbedMessage) {
+            Player player, String message,
+            String parsedMinecraftString, String parsedDiscordString, String parsedDiscordEmbedTitle,
+            String parsedDiscordEmbedMessage) {
         super(
                 type,
                 server.getServerInfo().getName(),
@@ -44,8 +46,7 @@ public class VelocityChatMessageData extends ChatMessageData {
                 parsedMinecraftString,
                 parsedDiscordString,
                 parsedDiscordEmbedTitle,
-                parsedDiscordEmbedMessage
-        );
+                parsedDiscordEmbedMessage);
 
         this.plugin = plugin;
         this.server = server;
@@ -60,11 +61,12 @@ public class VelocityChatMessageData extends ChatMessageData {
         plugin.getProxyServer().getAllPlayers().stream()
                 .filter((streamPlayer) -> !blacklistedUUIDs.contains(streamPlayer))
                 .filter((streamPlayer) -> {
-                    if (!plugin.getConfig().get(ConfigKey.USE_PERMISSIONS).asBoolean()) return true;
+                    if (!plugin.getConfig().get(ConfigKey.USE_PERMISSIONS).asBoolean())
+                        return true;
                     return streamPlayer.hasPermission(Permission.READ_CHAT_MESSAGE.getPermissionNode());
                 })
                 .filter((streamPlayer) -> !VelocityServerListener.playerIsInDisabledServer(streamPlayer, plugin))
-                .forEach((streamPlayer) -> streamPlayer.sendMessage(component));
+                .forEach((streamPlayer) -> LegacyMessageHelper.sendSafeMessage(streamPlayer, component));
 
     }
 
